@@ -80,7 +80,11 @@ export class SessionManager {
 
     // Create shared queue and processor BEFORE any async operations
     const queue = new ImageGenerationQueue();
-    const processor = new QueueProcessor(queue, settings);
+    const processor = new QueueProcessor(
+      queue,
+      settings,
+      settings.maxConcurrentGenerations
+    );
 
     // Get streaming preview widget instance
     const previewWidget = getStreamingPreviewWidget();
@@ -438,7 +442,11 @@ export class SessionManager {
       logger.info(`Creating new regeneration session for message ${messageId}`);
 
       const queue = new ImageGenerationQueue();
-      const processor = new QueueProcessor(queue, settings);
+      const processor = new QueueProcessor(
+        queue,
+        settings,
+        settings.maxConcurrentGenerations
+      );
 
       session = {
         sessionId: generateSessionId(),
