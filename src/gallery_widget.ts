@@ -275,8 +275,11 @@ export class GalleryWidgetView {
 
     if (images.length > 0) {
       // Create message preview (first 100 chars, strip HTML)
+      // Strip <img> tags first to prevent browser from loading images
+      // when parsing innerHTML (even on detached elements, browsers fetch img src)
+      const sanitizedText = messageText.replace(/<img\s+[^>]*>/gi, '');
       const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = messageText;
+      tempDiv.innerHTML = sanitizedText;
       const plainText = tempDiv.textContent || tempDiv.innerText || '';
       const messagePreview =
         plainText.substring(0, 100) + (plainText.length > 100 ? '...' : '');
@@ -342,8 +345,11 @@ export class GalleryWidgetView {
 
       if (images.length > 0) {
         // Create message preview (first 100 chars, strip HTML)
+        // Strip <img> tags first to prevent browser from loading images
+        // when parsing innerHTML (even on detached elements, browsers fetch img src)
+        const sanitizedText = messageText.replace(/<img\s+[^>]*>/gi, '');
         const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = messageText;
+        tempDiv.innerHTML = sanitizedText;
         const plainText = tempDiv.textContent || tempDiv.innerText || '';
         const messagePreview =
           plainText.substring(0, 100) + (plainText.length > 100 ? '...' : '');
