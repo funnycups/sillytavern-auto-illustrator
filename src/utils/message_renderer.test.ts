@@ -9,6 +9,7 @@ import * as metadata from '../metadata';
 // Mock the metadata module
 vi.mock('../metadata', () => ({
   saveMetadata: vi.fn(),
+  saveChat: vi.fn(),
 }));
 
 // Mock the logger
@@ -31,8 +32,9 @@ describe('message_renderer', () => {
     // Reset all mocks
     vi.clearAllMocks();
 
-    // Reset saveMetadata mock to resolve successfully
+    // Reset save mocks to resolve successfully
     vi.mocked(metadata.saveMetadata).mockResolvedValue(undefined);
+    vi.mocked(metadata.saveChat).mockResolvedValue(undefined);
 
     // Create mock message
     mockMessage = {
@@ -89,10 +91,12 @@ describe('message_renderer', () => {
       expect(mockEventSource.emit).toHaveBeenCalledWith('MESSAGE_UPDATED', 0);
     });
 
-    it('should call saveMetadata by default', async () => {
+    it('should call saveChat by default to persist message.mes changes', async () => {
       await renderMessageUpdate(0);
 
-      expect(metadata.saveMetadata).toHaveBeenCalledTimes(1);
+      expect(metadata.saveChat).toHaveBeenCalledTimes(1);
+      // saveMetadata alone does not persist message.mes — must use saveChat
+      expect(metadata.saveMetadata).not.toHaveBeenCalled();
     });
 
     it('should emit events in correct order', async () => {
@@ -107,8 +111,8 @@ describe('message_renderer', () => {
         callOrder.push('updateMessageBlock');
       });
 
-      vi.mocked(metadata.saveMetadata).mockImplementation(async () => {
-        callOrder.push('saveMetadata');
+      vi.mocked(metadata.saveChat).mockImplementation(async () => {
+        callOrder.push('saveChat');
       });
 
       await renderMessageUpdate(0);
@@ -117,13 +121,14 @@ describe('message_renderer', () => {
         'emit:MESSAGE_EDITED',
         'updateMessageBlock',
         'emit:MESSAGE_UPDATED',
-        'saveMetadata',
+        'saveChat',
       ]);
     });
 
-    it('should skip saveMetadata when skipSave is true', async () => {
+    it('should skip saveChat when skipSave is true', async () => {
       await renderMessageUpdate(0, {skipSave: true});
 
+      expect(metadata.saveChat).not.toHaveBeenCalled();
       expect(metadata.saveMetadata).not.toHaveBeenCalled();
     });
 
@@ -192,34 +197,34 @@ describe('message_renderer', () => {
       );
     });
 
-    it('should propagate errors from saveMetadata', async () => {
+    it('should propagate errors from saveChat', async () => {
       const testError = new Error('Save failed');
-      vi.mocked(metadata.saveMetadata).mockRejectedValue(testError);
+      vi.mocked(metadata.saveChat).mockRejectedValue(testError);
 
       await expect(renderMessageUpdate(0)).rejects.toThrow('Save failed');
     });
 
-    it('should not call saveMetadata if error occurs before save step', async () => {
+    it('should not call saveChat if error occurs before save step', async () => {
       const testError = new Error('Update failed');
       mockContext.updateMessageBlock.mockImplementation(() => {
         throw testError;
       });
 
       await expect(renderMessageUpdate(0)).rejects.toThrow('Update failed');
-      expect(metadata.saveMetadata).not.toHaveBeenCalled();
+      expect(metadata.saveChat).not.toHaveBeenCalled();
     });
 
     it('should handle undefined options parameter', async () => {
       await renderMessageUpdate(0, undefined);
 
-      expect(metadata.saveMetadata).toHaveBeenCalledTimes(1);
+      expect(metadata.saveChat).toHaveBeenCalledTimes(1);
       expect(mockEventSource.emit).toHaveBeenCalledTimes(2);
     });
 
     it('should handle empty options object', async () => {
       await renderMessageUpdate(0, {});
 
-      expect(metadata.saveMetadata).toHaveBeenCalledTimes(1);
+      expect(metadata.saveChat).toHaveBeenCalledTimes(1);
       expect(mockEventSource.emit).toHaveBeenCalledTimes(2);
     });
   });

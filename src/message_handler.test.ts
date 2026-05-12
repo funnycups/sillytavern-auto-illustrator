@@ -39,6 +39,7 @@ vi.mock('./utils/message_renderer', () => ({
 vi.mock('./metadata', () => ({
   getMetadata: vi.fn(() => ({})),
   saveMetadata: vi.fn().mockResolvedValue(undefined),
+  saveChat: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('./reconciliation', () => ({

@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Message Edits Not Persisted (Data Loss)** - Fixed critical bug where `message.mes` mutations made by the extension were never written to disk
+  - Root cause: After mutating `message.mes` (inserting prompt tags, inserting images, reconciling, deleting images, updating prompts), the code called `saveMetadata()`, which SillyTavern routes through `saveChatMetadataInternal` with `withMessages: false` — so it patches only `chat_metadata` and skips the messages array
+  - Symptom: Inserted/regenerated/reconciled image tags and prompt tags would silently disappear from disk; they only appeared to persist due to an unrelated full-chat rollback path that has since been closed
+  - Solution: Added a `saveChat()` helper in `src/metadata.ts` that prefers `context.saveChatDebounced` (1s debounce, batches streaming updates) and falls back to `context.saveChat`
+  - Switched `renderMessageUpdate` (the unified post-edit save point) and the prompt-tag insertion path in `message_handler.ts` to call `saveChat()` instead of `saveMetadata()`
+  - `saveMetadata()` is retained for callers that truly only mutate `chat_metadata` (e.g., gallery widget state, prompt registry updates in `prompt_manager.ts`)
+
 - **Image Click Handlers (Race Condition + Selector Bug + HTML Encoding)** - Fixed critical bug where click handlers failed to attach to images, especially failed generation placeholders
   - Root cause #1: Race condition between `renderMessageUpdate()` and `attachRegenerationHandlers()` - handlers were attached before DOM was ready
   - Root cause #2: CSS selector failure with data URIs containing `#` fragment identifiers - `querySelector('img[src="data:...#promptId=..."]')` fails due to invalid CSS syntax

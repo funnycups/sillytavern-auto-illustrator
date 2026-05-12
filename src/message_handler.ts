@@ -14,7 +14,7 @@ import {generatePromptsForMessage} from './services/prompt_generation_service';
 import {insertPromptTagsWithContext} from './prompt_insertion';
 import {isIndependentApiMode} from './mode_utils';
 import {reconcileMessage} from './reconciliation';
-import {getMetadata, saveMetadata} from './metadata';
+import {getMetadata, saveChat} from './metadata';
 import {renderMessageUpdate} from './utils/message_renderer';
 import {attachRegenerationHandlers} from './manual_generation';
 
@@ -243,7 +243,7 @@ export async function handleMessageReceived(
 
         // Step 3: Save updated message with prompt tags
         message.mes = finalText;
-        await saveMetadata();
+        await saveChat();
         logger.info(
           `Inserted ${totalInserted} prompt tags into message (${insertionResult.failedSuggestions.length} appended at end)`
         );

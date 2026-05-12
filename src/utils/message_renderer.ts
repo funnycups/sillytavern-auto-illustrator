@@ -6,7 +6,7 @@
  */
 
 import {createLogger} from '../logger';
-import {saveMetadata} from '../metadata';
+import {saveChat} from '../metadata';
 
 const logger = createLogger('MessageRenderer');
 
@@ -27,7 +27,12 @@ export interface RenderMessageUpdateOptions {
  * 1. Emit MESSAGE_EDITED (triggers regex "Run on Edit" and other processing)
  * 2. Call updateMessageBlock() (render the message in DOM)
  * 3. Emit MESSAGE_UPDATED (notify other extensions that message is updated)
- * 4. Save metadata (persists changes to disk, includes chat save)
+ * 4. Save chat (persists message.mes AND metadata to disk)
+ *
+ * Step 4 must use saveChat — saveMetadata alone routes through
+ * SillyTavern's saveChatMetadataInternal with withMessages=false, so
+ * any message.mes mutation made before calling this function would not
+ * be persisted.
  *
  * This function ensures a consistent rendering pattern across the extension,
  * preventing bugs from missing events or incorrect save sequences.
@@ -85,13 +90,13 @@ export async function renderMessageUpdate(
     await context.eventSource.emit(MESSAGE_UPDATED, messageId);
     logger.debug(`Emitted MESSAGE_UPDATED for message ${messageId}`);
 
-    // Step 4: Save metadata (which includes chat save) unless skipSave is true
+    // Step 4: Save chat (persists message.mes and metadata) unless skipSave is true
     if (!skipSave) {
-      await saveMetadata();
-      logger.debug(`Saved metadata for message ${messageId}`);
+      await saveChat();
+      logger.debug(`Saved chat for message ${messageId}`);
     } else {
       logger.debug(
-        `Skipped metadata save for message ${messageId} (skipSave: true)`
+        `Skipped chat save for message ${messageId} (skipSave: true)`
       );
     }
 

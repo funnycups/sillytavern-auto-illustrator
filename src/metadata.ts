@@ -93,8 +93,12 @@ export function loadMetadataFromContext(): void {
 })();
 
 /**
- * Saves the current metadata to the server
- * Call this after modifying metadata (e.g., after registering prompts or linking images)
+ * Saves the current chat metadata to the server.
+ *
+ * IMPORTANT: This persists chat_metadata ONLY. SillyTavern's
+ * saveMetadataDebounced routes through saveChatMetadataInternal with
+ * withMessages=false, so message.mes mutations are NOT saved here.
+ * Use {@link saveChat} after editing message text.
  *
  * Uses debounced save to prevent blocking during streaming operations.
  * The save is delayed by 1 second to batch multiple rapid changes.
@@ -128,6 +132,38 @@ export async function saveMetadata(): Promise<void> {
     }
   } catch (error) {
     logger.error('Failed to save metadata:', error);
+    throw error;
+  }
+}
+
+/**
+ * Saves the full chat (messages AND metadata) to the server.
+ *
+ * Call this after mutating message.mes — saveMetadata alone will not
+ * persist message edits because it skips the messages array.
+ *
+ * Prefers context.saveChatDebounced (batches rapid changes during
+ * streaming) and falls back to context.saveChat for older SillyTavern.
+ */
+export async function saveChat(): Promise<void> {
+  const context = SillyTavern.getContext();
+  if (!context) {
+    logger.warn('Cannot save chat: context not available');
+    return;
+  }
+
+  try {
+    if (typeof context.saveChatDebounced === 'function') {
+      context.saveChatDebounced();
+      logger.debug('Chat save scheduled (debounced, 1s delay)');
+    } else if (typeof context.saveChat === 'function') {
+      await context.saveChat();
+      logger.trace('Chat saved to server via saveChat()');
+    } else {
+      logger.error('Cannot save chat: no save method available on context');
+    }
+  } catch (error) {
+    logger.error('Failed to save chat:', error);
     throw error;
   }
 }
