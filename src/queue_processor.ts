@@ -135,7 +135,7 @@ export class QueueProcessor {
       // If we're below max concurrent, try to start another generation
       if (this.activeGenerations < this.maxConcurrent) {
         this.isProcessing = false;
-        setImmediate(() => this.processNext());
+        queueMicrotask(() => this.processNext());
       } else {
         this.isProcessing = false;
       }
