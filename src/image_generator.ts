@@ -577,7 +577,13 @@ export async function insertDeferredImages(
 
   // Render message with proper event sequence and save
   // This will emit MESSAGE_UPDATED when DOM is updated, triggering handler attachment
+  logger.info(
+    `[diag] insertDeferredImages calling renderMessageUpdate(${messageId})`
+  );
   await renderMessageUpdate(messageId);
+  logger.info(
+    `[diag] insertDeferredImages: renderMessageUpdate(${messageId}) returned`
+  );
 
   // Post-insertion verification: check that images survived
   if (reconciliationConfig.enableMarkers && successCount > 0) {

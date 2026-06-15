@@ -75,6 +75,12 @@ export async function renderMessageUpdate(
     throw new Error(errorMsg);
   }
 
+  // DIAG: entry — confirm renderMessageUpdate even ran, and what mes looks like.
+  const liveMes = context.chat?.[messageId]?.mes ?? '';
+  logger.info(
+    `[diag] renderMessageUpdate(${messageId}) entry: skipSave=${skipSave} mesLen=${liveMes.length} hasImg=${/<img\s/i.test(liveMes)}`
+  );
+
   try {
     // Step 1: Emit MESSAGE_EDITED to trigger regex "Run on Edit" and other processing
     const MESSAGE_EDITED = context.eventTypes.MESSAGE_EDITED;
@@ -92,11 +98,12 @@ export async function renderMessageUpdate(
 
     // Step 4: Save chat (persists message.mes and metadata) unless skipSave is true
     if (!skipSave) {
+      logger.info(`[diag] about to call saveChat() for message ${messageId}`);
       await saveChat();
-      logger.debug(`Saved chat for message ${messageId}`);
+      logger.info(`[diag] saveChat() returned for message ${messageId}`);
     } else {
-      logger.debug(
-        `Skipped chat save for message ${messageId} (skipSave: true)`
+      logger.info(
+        `[diag] skipSave=true — not calling saveChat for message ${messageId}`
       );
     }
 
@@ -104,7 +111,7 @@ export async function renderMessageUpdate(
       `Message ${messageId} rendered successfully (skipSave: ${skipSave})`
     );
   } catch (error) {
-    logger.error(`Failed to render message ${messageId}:`, error);
+    logger.error(`[diag] renderMessageUpdate(${messageId}) threw:`, error);
     throw error;
   }
 }

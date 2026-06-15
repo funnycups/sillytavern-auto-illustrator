@@ -152,18 +152,27 @@ export async function saveChat(): Promise<void> {
     return;
   }
 
+  // DIAG: probe which save method is available so we can tell from console
+  // whether the debounced path is being taken or the synchronous fallback.
+  logger.info(
+    `[diag] saveChat entry: typeof saveChatDebounced=${typeof context.saveChatDebounced}, typeof saveChat=${typeof context.saveChat}`
+  );
+
   try {
     if (typeof context.saveChatDebounced === 'function') {
+      logger.info('[diag] taking saveChatDebounced branch');
       context.saveChatDebounced();
-      logger.debug('Chat save scheduled (debounced, 1s delay)');
+      logger.info('[diag] saveChatDebounced() returned (scheduled, 1s)');
     } else if (typeof context.saveChat === 'function') {
+      logger.info('[diag] taking saveChat (sync) branch — awaiting…');
+      const t0 = Date.now();
       await context.saveChat();
-      logger.trace('Chat saved to server via saveChat()');
+      logger.info(`[diag] saveChat() resolved after ${Date.now() - t0}ms`);
     } else {
       logger.error('Cannot save chat: no save method available on context');
     }
   } catch (error) {
-    logger.error('Failed to save chat:', error);
+    logger.error('[diag] saveChat threw:', error);
     throw error;
   }
 }
