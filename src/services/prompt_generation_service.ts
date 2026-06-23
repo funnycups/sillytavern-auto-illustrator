@@ -229,7 +229,7 @@ export async function generatePromptsForMessage(
       includeCharacterCard: false,
       worldInfoSource: 'none',
     });
-    llmResponse = String(result?.content ?? '');
+    llmResponse = String(result?.assistantText ?? '');
 
     logger.debug('LLM response received');
     logger.trace('Raw LLM response:', llmResponse);

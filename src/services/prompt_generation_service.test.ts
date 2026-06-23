@@ -33,7 +33,7 @@ REASONING: Key visual scene
 ---END---`;
 
       vi.mocked(mockContext.generateTask!).mockResolvedValue({
-        content: llmResponse,
+        assistantText: llmResponse,
       });
 
       const result = await generatePromptsForMessage(
@@ -64,7 +64,7 @@ REASONING: Second moment
 ---END---`;
 
       vi.mocked(mockContext.generateTask!).mockResolvedValue({
-        content: llmResponse,
+        assistantText: llmResponse,
       });
 
       const result = await generatePromptsForMessage(
@@ -90,7 +90,7 @@ REASONING: Test scene
 Hope this helps!`;
 
       vi.mocked(mockContext.generateTask!).mockResolvedValue({
-        content: llmResponse,
+        assistantText: llmResponse,
       });
 
       const result = await generatePromptsForMessage(
@@ -108,7 +108,7 @@ Hope this helps!`;
       const llmResponse = '---END---';
 
       vi.mocked(mockContext.generateTask!).mockResolvedValue({
-        content: llmResponse,
+        assistantText: llmResponse,
       });
 
       const result = await generatePromptsForMessage(
@@ -125,7 +125,7 @@ Hope this helps!`;
       const llmResponse = 'This is not a valid format at all';
 
       vi.mocked(mockContext.generateTask!).mockResolvedValue({
-        content: llmResponse,
+        assistantText: llmResponse,
       });
 
       const result = await generatePromptsForMessage(
@@ -143,7 +143,7 @@ Hope this helps!`;
 ---END---`;
 
       vi.mocked(mockContext.generateTask!).mockResolvedValue({
-        content: llmResponse,
+        assistantText: llmResponse,
       });
 
       const result = await generatePromptsForMessage(
@@ -174,7 +174,7 @@ REASONING: Valid too
 ---END---`;
 
       vi.mocked(mockContext.generateTask!).mockResolvedValue({
-        content: llmResponse,
+        assistantText: llmResponse,
       });
 
       const result = await generatePromptsForMessage(
@@ -206,7 +206,7 @@ REASONING: Missing INSERT_BEFORE field
 ---END---`;
 
       vi.mocked(mockContext.generateTask!).mockResolvedValue({
-        content: llmResponse,
+        assistantText: llmResponse,
       });
 
       const result = await generatePromptsForMessage(
@@ -259,7 +259,7 @@ REASONING: Seventh (should be cut off)
 ---END---`;
 
       vi.mocked(mockContext.generateTask!).mockResolvedValue({
-        content: llmResponse,
+        assistantText: llmResponse,
       });
 
       // Settings has maxPromptsPerMessage = 5
@@ -294,7 +294,7 @@ REASONING: Second
 ---END---`;
 
       vi.mocked(mockContext.generateTask!).mockResolvedValue({
-        content: llmResponse,
+        assistantText: llmResponse,
       });
 
       mockSettings.maxPromptsPerMessage = 1;
@@ -348,7 +348,7 @@ REASONING:   reason
 ---END---`;
 
       vi.mocked(mockContext.generateTask!).mockResolvedValue({
-        content: llmResponse,
+        assistantText: llmResponse,
       });
 
       const result = await generatePromptsForMessage(
@@ -373,7 +373,7 @@ REASONING: Test special characters
 ---END---`;
 
       vi.mocked(mockContext.generateTask!).mockResolvedValue({
-        content: llmResponse,
+        assistantText: llmResponse,
       });
 
       const result = await generatePromptsForMessage(
@@ -397,7 +397,7 @@ REASONING: 中文测试
 ---END---`;
 
       vi.mocked(mockContext.generateTask!).mockResolvedValue({
-        content: llmResponse,
+        assistantText: llmResponse,
       });
 
       const result = await generatePromptsForMessage(
@@ -421,7 +421,7 @@ INSERT_BEFORE: message
 ---END---`;
 
       vi.mocked(mockContext.generateTask!).mockResolvedValue({
-        content: llmResponse,
+        assistantText: llmResponse,
       });
 
       const result = await generatePromptsForMessage(
@@ -447,7 +447,7 @@ REASONING: Test
 \`\`\``;
 
       vi.mocked(mockContext.generateTask!).mockResolvedValue({
-        content: llmResponse,
+        assistantText: llmResponse,
       });
 
       const result = await generatePromptsForMessage(
@@ -471,7 +471,7 @@ REASONING: Handles newlines naturally
 ---END---`;
 
       vi.mocked(mockContext.generateTask!).mockResolvedValue({
-        content: llmResponse,
+        assistantText: llmResponse,
       });
 
       const result = await generatePromptsForMessage(
