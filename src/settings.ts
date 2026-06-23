@@ -263,6 +263,18 @@ export function createSettingsUI(): string {
           </div>
 
           <div id="${UI_ELEMENT_IDS.INDEPENDENT_API_SETTINGS_CONTAINER}" style="display: none;">
+            <label for="${UI_ELEMENT_IDS.INDEPENDENT_API_PRESET}">
+              <span>${t('settings.independentApiPreset')}</span>
+              <small>${t('settings.independentApiPresetDesc')}</small>
+              <select id="${UI_ELEMENT_IDS.INDEPENDENT_API_PRESET}" class="text_pole"></select>
+            </label>
+
+            <label for="${UI_ELEMENT_IDS.INDEPENDENT_LLM_PRESET}">
+              <span>${t('settings.independentLlmPreset')}</span>
+              <small>${t('settings.independentLlmPresetDesc')}</small>
+              <select id="${UI_ELEMENT_IDS.INDEPENDENT_LLM_PRESET}" class="text_pole"></select>
+            </label>
+
             <label for="${UI_ELEMENT_IDS.MAX_PROMPTS_PER_MESSAGE}">
               <span>${t('settings.maxPromptsPerMessage')}</span>
               <small>${t('settings.maxPromptsPerMessageDesc')}</small>

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Luker preset & API reuse for Independent API mode** - The standalone LLM call now routes through Luker's `context.generateTask`, exposing two new settings:
+  - **Connection Profile**: pick a Luker connection-manager profile to choose the provider/model/endpoint
+  - **Chat Completion Preset**: pick a Luker chat-completion preset (temperature, prompt post-processing, etc.)
+  - Both default to "(Current configuration)" — leaving them empty preserves the chat's existing API/preset
+  - Independent API mode now requires Luker; a startup toast surfaces the dependency if `context.generateTask` is missing
+
 ### Fixed
 
 - **Message Edits Not Persisted (Data Loss)** - Fixed critical bug where `message.mes` mutations made by the extension were never written to disk

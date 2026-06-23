@@ -171,10 +171,10 @@ export async function generatePromptsForMessage(
   logger.info('Generating image prompts using separate LLM call');
   logger.debug(`Message length: ${messageText.length} characters`);
 
-  // Check for LLM availability
-  if (!context.generateRaw) {
-    logger.error('generateRaw not available in context');
-    throw new Error('LLM generation not available');
+  // Check for LLM availability (Luker provides context.generateTask)
+  if (typeof context.generateTask !== 'function') {
+    logger.error('context.generateTask not available (Luker is required)');
+    throw new Error('LLM generation not available: Luker is required');
   }
 
   // Build system prompt with all instructions from template
@@ -202,18 +202,34 @@ export async function generatePromptsForMessage(
     contextMessageCount
   );
 
-  logger.debug('Calling LLM for prompt generation (using generateRaw)');
+  logger.debug('Calling LLM for prompt generation (using generateTask)');
   logger.debug('Context message count:', contextMessageCount);
   logger.debug('User prompt length:', userPrompt.length);
+  logger.debug(
+    'Connection profile:',
+    settings.independentApiPresetName || '(current)'
+  );
+  logger.debug(
+    'Chat completion preset:',
+    settings.independentLlmPresetName || '(current)'
+  );
   logger.trace('User prompt:', userPrompt);
 
-  // Call LLM with generateRaw (no chat context)
+  // Call LLM via Luker's generateTask, routing through user-chosen connection
+  // profile / chat completion preset when set (empty = chat's current config).
   let llmResponse: string;
   try {
-    llmResponse = await context.generateRaw({
-      systemPrompt,
-      prompt: userPrompt,
+    const result = await context.generateTask({
+      taskMessages: [
+        {role: 'system', content: systemPrompt},
+        {role: 'user', content: userPrompt},
+      ],
+      apiPresetName: String(settings.independentApiPresetName || '').trim(),
+      llmPresetName: String(settings.independentLlmPresetName || '').trim(),
+      includeCharacterCard: false,
+      worldInfoSource: 'none',
     });
+    llmResponse = String(result?.content ?? '');
 
     logger.debug('LLM response received');
     logger.trace('Raw LLM response:', llmResponse);

@@ -10,9 +10,9 @@ describe('prompt_generation_service', () => {
   let mockSettings: AutoIllustratorSettings;
 
   beforeEach(() => {
-    // Create mock context with generateRaw
+    // Create mock context with generateTask (Luker API)
     mockContext = {
-      generateRaw: vi.fn(),
+      generateTask: vi.fn(),
     } as unknown as SillyTavernContext;
 
     // Create mock settings
@@ -32,7 +32,9 @@ INSERT_BEFORE: under the moonlight
 REASONING: Key visual scene
 ---END---`;
 
-      vi.mocked(mockContext.generateRaw).mockResolvedValue(llmResponse);
+      vi.mocked(mockContext.generateTask!).mockResolvedValue({
+        content: llmResponse,
+      });
 
       const result = await generatePromptsForMessage(
         messageText,
@@ -61,7 +63,9 @@ INSERT_BEFORE: event three
 REASONING: Second moment
 ---END---`;
 
-      vi.mocked(mockContext.generateRaw).mockResolvedValue(llmResponse);
+      vi.mocked(mockContext.generateTask!).mockResolvedValue({
+        content: llmResponse,
+      });
 
       const result = await generatePromptsForMessage(
         messageText,
@@ -85,7 +89,9 @@ REASONING: Test scene
 ---END---
 Hope this helps!`;
 
-      vi.mocked(mockContext.generateRaw).mockResolvedValue(llmResponse);
+      vi.mocked(mockContext.generateTask!).mockResolvedValue({
+        content: llmResponse,
+      });
 
       const result = await generatePromptsForMessage(
         messageText,
@@ -101,7 +107,9 @@ Hope this helps!`;
       const messageText = 'No visual content here.';
       const llmResponse = '---END---';
 
-      vi.mocked(mockContext.generateRaw).mockResolvedValue(llmResponse);
+      vi.mocked(mockContext.generateTask!).mockResolvedValue({
+        content: llmResponse,
+      });
 
       const result = await generatePromptsForMessage(
         messageText,
@@ -116,7 +124,9 @@ Hope this helps!`;
       const messageText = 'Test message.';
       const llmResponse = 'This is not a valid format at all';
 
-      vi.mocked(mockContext.generateRaw).mockResolvedValue(llmResponse);
+      vi.mocked(mockContext.generateTask!).mockResolvedValue({
+        content: llmResponse,
+      });
 
       const result = await generatePromptsForMessage(
         messageText,
@@ -132,7 +142,9 @@ Hope this helps!`;
       const llmResponse = `Some text but no prompts
 ---END---`;
 
-      vi.mocked(mockContext.generateRaw).mockResolvedValue(llmResponse);
+      vi.mocked(mockContext.generateTask!).mockResolvedValue({
+        content: llmResponse,
+      });
 
       const result = await generatePromptsForMessage(
         messageText,
@@ -161,7 +173,9 @@ INSERT_BEFORE: test
 REASONING: Valid too
 ---END---`;
 
-      vi.mocked(mockContext.generateRaw).mockResolvedValue(llmResponse);
+      vi.mocked(mockContext.generateTask!).mockResolvedValue({
+        content: llmResponse,
+      });
 
       const result = await generatePromptsForMessage(
         messageText,
@@ -191,7 +205,9 @@ INSERT_AFTER: test
 REASONING: Missing INSERT_BEFORE field
 ---END---`;
 
-      vi.mocked(mockContext.generateRaw).mockResolvedValue(llmResponse);
+      vi.mocked(mockContext.generateTask!).mockResolvedValue({
+        content: llmResponse,
+      });
 
       const result = await generatePromptsForMessage(
         messageText,
@@ -242,7 +258,9 @@ INSERT_BEFORE: n
 REASONING: Seventh (should be cut off)
 ---END---`;
 
-      vi.mocked(mockContext.generateRaw).mockResolvedValue(llmResponse);
+      vi.mocked(mockContext.generateTask!).mockResolvedValue({
+        content: llmResponse,
+      });
 
       // Settings has maxPromptsPerMessage = 5
       const result = await generatePromptsForMessage(
@@ -275,7 +293,9 @@ INSERT_BEFORE: d
 REASONING: Second
 ---END---`;
 
-      vi.mocked(mockContext.generateRaw).mockResolvedValue(llmResponse);
+      vi.mocked(mockContext.generateTask!).mockResolvedValue({
+        content: llmResponse,
+      });
 
       mockSettings.maxPromptsPerMessage = 1;
 
@@ -292,7 +312,7 @@ REASONING: Second
     it('should return empty array when generateRaw throws error', async () => {
       const messageText = 'Test message.';
 
-      vi.mocked(mockContext.generateRaw).mockRejectedValue(
+      vi.mocked(mockContext.generateTask!).mockRejectedValue(
         new Error('LLM error')
       );
 
@@ -327,7 +347,9 @@ INSERT_BEFORE:   after
 REASONING:   reason
 ---END---`;
 
-      vi.mocked(mockContext.generateRaw).mockResolvedValue(llmResponse);
+      vi.mocked(mockContext.generateTask!).mockResolvedValue({
+        content: llmResponse,
+      });
 
       const result = await generatePromptsForMessage(
         messageText,
@@ -350,7 +372,9 @@ INSERT_BEFORE: and special
 REASONING: Test special characters
 ---END---`;
 
-      vi.mocked(mockContext.generateRaw).mockResolvedValue(llmResponse);
+      vi.mocked(mockContext.generateTask!).mockResolvedValue({
+        content: llmResponse,
+      });
 
       const result = await generatePromptsForMessage(
         messageText,
@@ -372,7 +396,9 @@ INSERT_BEFORE: 玫瑰盛开
 REASONING: 中文测试
 ---END---`;
 
-      vi.mocked(mockContext.generateRaw).mockResolvedValue(llmResponse);
+      vi.mocked(mockContext.generateTask!).mockResolvedValue({
+        content: llmResponse,
+      });
 
       const result = await generatePromptsForMessage(
         messageText,
@@ -394,7 +420,9 @@ INSERT_AFTER: test
 INSERT_BEFORE: message
 ---END---`;
 
-      vi.mocked(mockContext.generateRaw).mockResolvedValue(llmResponse);
+      vi.mocked(mockContext.generateTask!).mockResolvedValue({
+        content: llmResponse,
+      });
 
       const result = await generatePromptsForMessage(
         messageText,
@@ -418,7 +446,9 @@ REASONING: Test
 ---END---
 \`\`\``;
 
-      vi.mocked(mockContext.generateRaw).mockResolvedValue(llmResponse);
+      vi.mocked(mockContext.generateTask!).mockResolvedValue({
+        content: llmResponse,
+      });
 
       const result = await generatePromptsForMessage(
         messageText,
@@ -440,7 +470,9 @@ INSERT_BEFORE: message with newlines
 REASONING: Handles newlines naturally
 ---END---`;
 
-      vi.mocked(mockContext.generateRaw).mockResolvedValue(llmResponse);
+      vi.mocked(mockContext.generateTask!).mockResolvedValue({
+        content: llmResponse,
+      });
 
       const result = await generatePromptsForMessage(
         messageText,

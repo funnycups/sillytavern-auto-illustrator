@@ -234,6 +234,9 @@ function updateUI(): void {
   // Toggle independent API settings visibility based on current mode
   toggleIndependentApiSettingsVisibility();
 
+  // Populate Luker preset selects with current values
+  populateIndependentApiSelects();
+
   // Update max prompts per message
   if (maxPromptsPerMessageInput) {
     maxPromptsPerMessageInput.value = settings.maxPromptsPerMessage.toString();
@@ -723,6 +726,24 @@ function handleSettingsChange(): void {
     llmPromptWritingGuidelinesTextarea?.value ??
     settings.llmPromptWritingGuidelines;
 
+  // Luker connection profile + chat completion preset selects
+  const independentApiPresetSelect = document.getElementById(
+    UI_ELEMENT_IDS.INDEPENDENT_API_PRESET
+  ) as HTMLSelectElement | null;
+  const independentLlmPresetSelect = document.getElementById(
+    UI_ELEMENT_IDS.INDEPENDENT_LLM_PRESET
+  ) as HTMLSelectElement | null;
+  if (independentApiPresetSelect) {
+    settings.independentApiPresetName = String(
+      independentApiPresetSelect.value || ''
+    ).trim();
+  }
+  if (independentLlmPresetSelect) {
+    settings.independentLlmPresetName = String(
+      independentLlmPresetSelect.value || ''
+    ).trim();
+  }
+
   settings.showGalleryWidget =
     showGalleryWidgetCheckbox?.checked ?? settings.showGalleryWidget;
   settings.showProgressWidget =
@@ -948,6 +969,110 @@ function toggleIndependentApiSettingsVisibility(): void {
     llmSettingsContainer.style.display = promptGenModeLLMRadio.checked
       ? 'block'
       : 'none';
+  }
+}
+
+/**
+ * Escapes HTML special characters for safe insertion into <option> markup.
+ */
+function escapeHtmlAttr(value: string): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Reads the Luker connection-manager chat-completion profiles from the global
+ * extension settings. Returns sorted, deduped name list.
+ */
+function getConnectionProfileNames(): string[] {
+  const profiles = (context.extensionSettings as Record<string, unknown>)
+    ?.connectionManager;
+  const list =
+    profiles &&
+    typeof profiles === 'object' &&
+    Array.isArray((profiles as {profiles?: unknown}).profiles)
+      ? ((profiles as {profiles: unknown[]}).profiles as Array<
+          Record<string, unknown>
+        >)
+      : [];
+  return [
+    ...new Set(
+      list
+        .filter(p => p && String(p.mode || '') === 'cc')
+        .map(p => String(p.name || '').trim())
+        .filter(Boolean)
+    ),
+  ].sort();
+}
+
+/**
+ * Reads the OpenAI-format chat completion preset names via SillyTavern's
+ * preset manager API.
+ */
+function getChatCompletionPresetNames(): string[] {
+  const manager = context.getPresetManager?.('openai');
+  const names = manager?.getAllPresets?.();
+  if (!Array.isArray(names)) return [];
+  return [
+    ...new Set(names.map(n => String(n || '').trim()).filter(Boolean)),
+  ].sort();
+}
+
+/**
+ * Populates the independent-API connection profile + chat completion preset
+ * selects with current Luker / SillyTavern values, preserving the saved
+ * selection (or showing it tagged "(missing)" if it no longer exists).
+ */
+function populateIndependentApiSelects(): void {
+  const apiSelect = document.getElementById(
+    UI_ELEMENT_IDS.INDEPENDENT_API_PRESET
+  ) as HTMLSelectElement | null;
+  const llmSelect = document.getElementById(
+    UI_ELEMENT_IDS.INDEPENDENT_LLM_PRESET
+  ) as HTMLSelectElement | null;
+
+  if (apiSelect) {
+    const selected = String(settings.independentApiPresetName || '').trim();
+    const names = getConnectionProfileNames();
+    const opts: string[] = [
+      `<option value="">${escapeHtmlAttr(t('settings.independentPresetCurrent'))}</option>`,
+    ];
+    for (const name of names) {
+      opts.push(
+        `<option value="${escapeHtmlAttr(name)}"${name === selected ? ' selected' : ''}>${escapeHtmlAttr(name)}</option>`
+      );
+    }
+    if (selected && !names.includes(selected)) {
+      opts.push(
+        `<option value="${escapeHtmlAttr(selected)}" selected>${escapeHtmlAttr(selected)} ${escapeHtmlAttr(t('settings.independentPresetMissing'))}</option>`
+      );
+    }
+    apiSelect.innerHTML = opts.join('');
+    apiSelect.value = selected;
+  }
+
+  if (llmSelect) {
+    const selected = String(settings.independentLlmPresetName || '').trim();
+    const names = getChatCompletionPresetNames();
+    const opts: string[] = [
+      `<option value="">${escapeHtmlAttr(t('settings.independentPresetCurrent'))}</option>`,
+    ];
+    for (const name of names) {
+      opts.push(
+        `<option value="${escapeHtmlAttr(name)}"${name === selected ? ' selected' : ''}>${escapeHtmlAttr(name)}</option>`
+      );
+    }
+    if (selected && !names.includes(selected)) {
+      opts.push(
+        `<option value="${escapeHtmlAttr(selected)}" selected>${escapeHtmlAttr(selected)} ${escapeHtmlAttr(t('settings.independentPresetMissing'))}</option>`
+      );
+    }
+    llmSelect.innerHTML = opts.join('');
+    llmSelect.value = selected;
   }
 }
 
@@ -1420,6 +1545,19 @@ function initialize(): void {
   settings = loadSettings(context);
   logger.info('Loaded settings:', settings);
 
+  // Luker integration check: independent-API mode depends on context.generateTask
+  if (
+    isIndependentApiMode(settings.promptGenerationMode) &&
+    typeof context.generateTask !== 'function'
+  ) {
+    toastr.error(t('toast.luokerRequired'), t('extensionName'), {
+      timeOut: 8000,
+    });
+    logger.error(
+      'context.generateTask is not available — independent-API mode requires Luker.'
+    );
+  }
+
   // Initialize previous image display width to track changes
   previousImageDisplayWidth = settings.imageDisplayWidth;
 
@@ -1619,6 +1757,21 @@ function initialize(): void {
     maxPromptsPerMessageInput?.addEventListener('change', handleSettingsChange);
     contextMessageCountInput?.addEventListener('change', handleSettingsChange);
     metaPromptDepthInput?.addEventListener('change', handleSettingsChange);
+
+    const independentApiPresetSelect = document.getElementById(
+      UI_ELEMENT_IDS.INDEPENDENT_API_PRESET
+    );
+    const independentLlmPresetSelect = document.getElementById(
+      UI_ELEMENT_IDS.INDEPENDENT_LLM_PRESET
+    );
+    independentApiPresetSelect?.addEventListener(
+      'change',
+      handleSettingsChange
+    );
+    independentLlmPresetSelect?.addEventListener(
+      'change',
+      handleSettingsChange
+    );
     llmFrequencyGuidelinesTextarea?.addEventListener(
       'change',
       handleSettingsChange

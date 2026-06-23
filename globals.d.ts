@@ -24,6 +24,13 @@ declare global {
 
   const toastr: Toastr;
 
+  // SillyTavern global entry point (also exposed as `Luker` in newer builds).
+  // Declared here so the build doesn't depend on the in-tree
+  // `../../../../public/global` resolution working at compile time.
+  const SillyTavern: {
+    getContext(): SillyTavernContext;
+  };
+
   // jQuery (loaded globally by SillyTavern)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const $: any;
@@ -78,6 +85,9 @@ declare global {
     this_chid: number;
     saveSettingsDebounced(): void;
     saveChat(): Promise<void>;
+    saveChatDebounced?(): void;
+    saveMetadata(): Promise<void>;
+    saveMetadataDebounced?(): void;
     setExtensionPrompt(
       key: string,
       value: string,
@@ -105,6 +115,27 @@ declare global {
       prefill?: string;
       jsonSchema?: unknown;
     }): Promise<string>;
+    // Luker extension API: routes a chat-completion request through a chosen
+    // connection profile (apiPresetName) and/or chat-completion preset
+    // (llmPresetName). Empty strings fall back to the chat's current config.
+    generateTask?(options: {
+      taskMessages: Array<{role: string; content: string}>;
+      apiPresetName?: string;
+      llmPresetName?: string;
+      includeCharacterCard?: boolean;
+      worldInfoSource?: 'none' | 'chat' | 'quiet';
+      runtimeWorldInfo?: unknown;
+      tools?: unknown[];
+      toolChoice?: unknown;
+      functionCallMode?: string;
+      functionCallOptions?: Record<string, unknown>;
+      abortSignal?: AbortSignal | null;
+    }): Promise<
+      {content?: string; toolCalls?: unknown[]} & Record<string, any>
+    >;
+    getPresetManager?(apiId: string): {
+      getAllPresets(): string[];
+    } | null;
   }
   /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -146,6 +177,10 @@ declare global {
     contextMessageCount: number;
     llmFrequencyGuidelines: string;
     llmPromptWritingGuidelines: string;
+    /** Luker connection profile name for independent-API LLM calls (empty = current API config) */
+    independentApiPresetName: string;
+    /** Luker chat-completion preset name for independent-API LLM calls (empty = current preset) */
+    independentLlmPresetName: string;
     /** Delay (ms) before running final reconciliation after GENERATION_ENDED (default: 5000, 0 to disable) */
     finalReconciliationDelayMs: number;
     /** Display width of generated images in chat messages (percentage: 10-100) */
