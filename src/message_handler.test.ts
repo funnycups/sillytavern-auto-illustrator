@@ -49,6 +49,18 @@ vi.mock('./reconciliation', () => ({
   })),
 }));
 
+vi.mock('./services/prompt_generation_service', () => ({
+  generatePromptsForMessage: vi.fn().mockResolvedValue([]),
+}));
+
+vi.mock('./prompt_insertion', () => ({
+  insertPromptTagsWithContext: vi.fn(() => ({
+    updatedText: 'message text',
+    insertedCount: 0,
+    failedSuggestions: [],
+  })),
+}));
+
 // Mock global SillyTavern
 global.SillyTavern = {
   getContext: vi.fn(),
@@ -210,6 +222,87 @@ describe('Message Handler V2', () => {
 
       // Should process even for system messages (only skip user messages)
       expect(mockSessionManager.finalizeStreamingAndInsert).toHaveBeenCalled();
+    });
+  });
+
+  describe('handleMessageReceived - type filtering', () => {
+    it('skips MESSAGE_RECEIVED with type=first_message', async () => {
+      const {generatePromptsForMessage} = await import(
+        './services/prompt_generation_service'
+      );
+      vi.mocked(generatePromptsForMessage).mockClear();
+      mockSessionManager.getSession.mockReturnValue(null);
+
+      await handleMessageReceived(
+        1,
+        mockContext,
+        mockSettings,
+        'first_message'
+      );
+
+      expect(mockSessionManager.getSession).not.toHaveBeenCalled();
+      expect(mockSessionManager.startStreamingSession).not.toHaveBeenCalled();
+      expect(generatePromptsForMessage).not.toHaveBeenCalled();
+    });
+
+    it('skips MESSAGE_RECEIVED with type=command', async () => {
+      mockSessionManager.getSession.mockReturnValue(null);
+
+      await handleMessageReceived(1, mockContext, mockSettings, 'command');
+
+      expect(mockSessionManager.getSession).not.toHaveBeenCalled();
+      expect(mockSessionManager.startStreamingSession).not.toHaveBeenCalled();
+    });
+
+    it('skips MESSAGE_RECEIVED with type=extension', async () => {
+      mockSessionManager.getSession.mockReturnValue(null);
+
+      await handleMessageReceived(1, mockContext, mockSettings, 'extension');
+
+      expect(mockSessionManager.getSession).not.toHaveBeenCalled();
+      expect(mockSessionManager.startStreamingSession).not.toHaveBeenCalled();
+    });
+
+    it('processes MESSAGE_RECEIVED with type=normal', async () => {
+      mockSessionManager.getSession.mockReturnValue(null);
+      mockSessionManager.startStreamingSession.mockResolvedValue({
+        sessionId: 's1',
+        messageId: 1,
+        type: 'streaming',
+      });
+
+      await handleMessageReceived(1, mockContext, mockSettings, 'normal');
+
+      expect(mockSessionManager.getSession).toHaveBeenCalledWith(1);
+      expect(mockSessionManager.startStreamingSession).toHaveBeenCalled();
+    });
+
+    it('processes MESSAGE_RECEIVED with type=swipe', async () => {
+      mockSessionManager.getSession.mockReturnValue(null);
+      mockSessionManager.startStreamingSession.mockResolvedValue({
+        sessionId: 's1',
+        messageId: 1,
+        type: 'streaming',
+      });
+
+      await handleMessageReceived(1, mockContext, mockSettings, 'swipe');
+
+      expect(mockSessionManager.getSession).toHaveBeenCalledWith(1);
+      expect(mockSessionManager.startStreamingSession).toHaveBeenCalled();
+    });
+
+    it('processes MESSAGE_RECEIVED with undefined type (backward compat)', async () => {
+      mockSessionManager.getSession.mockReturnValue(null);
+      mockSessionManager.startStreamingSession.mockResolvedValue({
+        sessionId: 's1',
+        messageId: 1,
+        type: 'streaming',
+      });
+
+      await handleMessageReceived(1, mockContext, mockSettings);
+
+      expect(mockSessionManager.getSession).toHaveBeenCalledWith(1);
+      expect(mockSessionManager.startStreamingSession).toHaveBeenCalled();
     });
   });
 

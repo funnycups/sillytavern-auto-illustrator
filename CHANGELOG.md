@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **New-chat character greeting triggers image generation** - Fixed bug where switching or opening a chat immediately fires image generation for the character-card first message
+  - Root cause: SillyTavern reuses `MESSAGE_RECEIVED` for multiple event sources (character greeting, slash-command inserts, other extensions, real LLM replies) and passes the source in the `type` parameter. The listener ignored `type`, treating every emission as a fresh LLM reply — in Independent API mode this even triggered a Luker call to generate prompts for the greeting
+  - Solution: `handleMessageReceived` now takes the `type` argument and skips `first_message`, `command`, and `extension` sources (Luker `script.js:14284/14338`, `group-chats.js:330`, `slash-commands.js:6023/6028`, `stable-diffusion/index.js:5054`)
+
 - **Message Edits Not Persisted (Data Loss)** - Fixed critical bug where `message.mes` mutations made by the extension were never written to disk
   - Root cause: After mutating `message.mes` (inserting prompt tags, inserting images, reconciling, deleting images, updating prompts), the code called `saveMetadata()`, which SillyTavern routes through `saveChatMetadataInternal` with `withMessages: false` — so it patches only `chat_metadata` and skips the messages array
   - Symptom: Inserted/regenerated/reconciled image tags and prompt tags would silently disappear from disk; they only appeared to persist due to an unrelated full-chat rollback path that has since been closed

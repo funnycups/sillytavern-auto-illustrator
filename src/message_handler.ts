@@ -24,6 +24,27 @@ const logger = createLogger('MessageHandler');
 const delayedReconciliations = new Map<number, NodeJS.Timeout>();
 
 /**
+ * MESSAGE_RECEIVED `type` values that must NOT trigger image generation.
+ *
+ * These are all events that share the MESSAGE_RECEIVED channel but do not
+ * represent a fresh LLM reply we should illustrate:
+ * - `first_message`: character-card greeting emitted on chat load/create
+ *   (SillyTavern `script.js:14284, 14338`, `group-chats.js:330`).
+ * - `command`: slash-command inserts (`slash-commands.js:6023, 6028`).
+ * - `extension`: messages injected by other extensions
+ *   (`extensions/stable-diffusion/index.js:5054`).
+ *
+ * `impersonate` / `quiet` are already filtered by SillyTavern before emit
+ * (`script.js:6541, 8880`) so we don't list them here — the source's
+ * existing gates are the contract.
+ */
+const SKIPPED_MESSAGE_RECEIVED_TYPES = new Set([
+  'first_message',
+  'command',
+  'extension',
+]);
+
+/**
  * Schedules a delayed reconciliation for a message
  * Cancels any existing delayed reconciliation for the same message
  */
@@ -141,13 +162,27 @@ export async function handleStreamTokenStarted(
  * @param messageId - Message ID that was received
  * @param context - SillyTavern context
  * @param settings - Extension settings
+ * @param type - The event's `type` parameter from SillyTavern. Distinguishes
+ *   real LLM replies (`normal`/`swipe`/`continue`/`regenerate`/`append`/
+ *   `appendFinal`) from other sources that share the same event channel
+ *   (`first_message`, `command`, `extension`).
  */
 export async function handleMessageReceived(
   messageId: number,
   context: SillyTavernContext,
-  settings: AutoIllustratorSettings
+  settings: AutoIllustratorSettings,
+  type?: string
 ): Promise<void> {
-  logger.debug(`MESSAGE_RECEIVED event for message ${messageId}`);
+  logger.debug(
+    `MESSAGE_RECEIVED event for message ${messageId} (type=${type ?? 'undefined'})`
+  );
+
+  if (type && SKIPPED_MESSAGE_RECEIVED_TYPES.has(type)) {
+    logger.info(
+      `Skipping MESSAGE_RECEIVED: type='${type}' is not a fresh LLM reply`
+    );
+    return;
+  }
 
   const message = context.chat?.[messageId];
   if (!message) {
@@ -465,7 +500,7 @@ export async function handleGenerationEnded(
  */
 export function createEventHandlers(settings: AutoIllustratorSettings): {
   onStreamTokenStarted: (messageId: number) => Promise<void>;
-  onMessageReceived: (messageId: number) => Promise<void>;
+  onMessageReceived: (messageId: number, type?: string) => Promise<void>;
   onGenerationEnded: (messageId: number) => Promise<void>;
 } {
   return {
@@ -485,14 +520,14 @@ export function createEventHandlers(settings: AutoIllustratorSettings): {
     /**
      * Handler for MESSAGE_RECEIVED event
      */
-    onMessageReceived: async (messageId: number) => {
+    onMessageReceived: async (messageId: number, type?: string) => {
       const context = SillyTavern.getContext();
       if (!context) {
         logger.warn('Failed to get context for MESSAGE_RECEIVED');
         return;
       }
 
-      await handleMessageReceived(messageId, context, settings);
+      await handleMessageReceived(messageId, context, settings, type);
     },
 
     /**

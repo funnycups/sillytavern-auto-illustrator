@@ -1386,15 +1386,22 @@ function registerEventHandlers(): void {
   });
 
   const MESSAGE_RECEIVED = context.eventTypes.MESSAGE_RECEIVED;
-  context.eventSource.on(MESSAGE_RECEIVED, (messageId: number) => {
-    // Handle streaming finalization or non-streaming message processing
-    handleMessageReceived(messageId, context, settings);
+  context.eventSource.on(
+    MESSAGE_RECEIVED,
+    (messageId: number, type?: string) => {
+      // Handle streaming finalization or non-streaming message processing.
+      // `type` distinguishes real LLM replies from other MESSAGE_RECEIVED
+      // sources (first_message greeting, slash-command inserts, other
+      // extensions) — the filtering lives in handleMessageReceived so it
+      // stays in one place and is easy to test.
+      handleMessageReceived(messageId, context, settings, type);
 
-    // Add image click handlers after message is received
-    setTimeout(() => {
-      addImageClickHandlers(settings);
-    }, 100);
-  });
+      // Add image click handlers after message is received
+      setTimeout(() => {
+        addImageClickHandlers(settings);
+      }, 100);
+    }
+  );
 
   // Add click handlers when messages are updated
   const MESSAGE_UPDATED = context.eventTypes.MESSAGE_UPDATED;

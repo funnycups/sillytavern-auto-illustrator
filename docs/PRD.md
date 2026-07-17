@@ -1,8 +1,8 @@
 # Product Requirements Document (PRD)
 # SillyTavern Auto Illustrator
 
-**Version**: 1.2
-**Last Updated**: 2025-10-17
+**Version**: 1.3
+**Last Updated**: 2026-07-17
 **Purpose**: Define desired behaviors for all features to prevent regressions
 
 ---
@@ -211,6 +211,38 @@ Result: Each session maintains independent state, no conflicts
 ❌ **DO NOT** skip final prompt scan after streaming ends (misses late prompts)
 ❌ **DO NOT** share state between concurrent streaming sessions
 ❌ **DO NOT** insert images if timeout occurs (prevents corruption)
+
+### 3.5 MESSAGE_RECEIVED Filtering
+
+**Desired behavior:** Image generation should only be triggered by a *fresh LLM reply the user just produced*. SillyTavern's `MESSAGE_RECEIVED` event is reused for other message sources (character greetings, slash-command inserts, other extensions), and those must not trigger image generation.
+
+**Requirements**
+
+**RECV-001**: Skip `MESSAGE_RECEIVED` when the event's `type` parameter is one of:
+- `first_message` — character-card greeting emitted on chat load/create
+- `command` — slash-command message inserts (`/sendas`, `/addswipe`, etc.)
+- `extension` — messages injected by other extensions
+
+**RECV-002**: `impersonate` and `quiet` are already filtered by SillyTavern before emit; the extension does not need to re-filter them.
+
+**RECV-003**: Any other `type` (including `normal`, `swipe`, `continue`, `regenerate`, `append`, `appendFinal`, or `undefined` for backward compatibility) is treated as a real LLM reply and processed normally.
+
+**Examples**
+
+**Example: Opening a chat with an existing character**
+```
+User: opens character X's chat (chat.length=1 with the greeting)
+T+0s:  SillyTavern emits MESSAGE_RECEIVED(0, 'first_message')
+T+0s:  Extension skips it — no image generation for the greeting
+
+Result: No images generated automatically for the greeting.
+        User can trigger manual generation if desired.
+```
+
+**Anti-Patterns**
+
+❌ **DO NOT** ignore the `type` argument and treat every `MESSAGE_RECEIVED` as a fresh reply (causes greetings to trigger a full LLM prompt-gen cycle every time the chat is opened)
+❌ **DO NOT** call the LLM to generate prompts for character greetings (they're static content authored by the character-card creator, not something the user just produced)
 
 ---
 
