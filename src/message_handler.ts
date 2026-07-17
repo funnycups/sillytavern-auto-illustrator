@@ -45,6 +45,41 @@ const SKIPPED_MESSAGE_RECEIVED_TYPES = new Set([
 ]);
 
 /**
+ * Flag latched by GENERATION_STOPPED, consumed by the next MESSAGE_RECEIVED.
+ *
+ * When a user aborts streaming, `stopGeneration()` emits GENERATION_STOPPED
+ * BEFORE `onFinishStreaming` emits MESSAGE_RECEIVED (`script.js:9190` runs
+ * synchronously in the stop handler; the abort then unwinds the streaming
+ * generator so `onFinishStreaming` runs on the next microtasks). We latch
+ * this so the following MESSAGE_RECEIVED can tell the difference between
+ * "message finished naturally" and "user hit stop, this is a partial".
+ *
+ * Only independent-API mode consumes the flag to skip processing (because
+ * skipping means "don't send the partial to the LLM"). Shared-API mode
+ * ignores the flag but still consumes it — the user's contract is
+ * "内联生成不感知任何变化", and consuming keeps the state single-shot so a
+ * shared-api stop cannot leak into a later independent-api generation.
+ */
+let pendingStop = false;
+
+/**
+ * Records that GENERATION_STOPPED just fired. Called from index.ts's event
+ * listener. The flag is single-shot: the next MESSAGE_RECEIVED consumes it.
+ */
+export function notifyGenerationStopped(): void {
+  pendingStop = true;
+  logger.debug('GENERATION_STOPPED latched (pendingStop=true)');
+}
+
+/**
+ * Test-only helper: clears the pendingStop flag between tests.
+ * Not part of the runtime contract.
+ */
+export function resetPendingStopForTests(): void {
+  pendingStop = false;
+}
+
+/**
  * Schedules a delayed reconciliation for a message
  * Cancels any existing delayed reconciliation for the same message
  */
@@ -180,6 +215,17 @@ export async function handleMessageReceived(
   if (type && SKIPPED_MESSAGE_RECEIVED_TYPES.has(type)) {
     logger.info(
       `Skipping MESSAGE_RECEIVED: type='${type}' is not a fresh LLM reply`
+    );
+    return;
+  }
+
+  // Consume the stop flag regardless of mode so it stays single-shot.
+  // Only independent-API mode acts on it (see comment on `pendingStop`).
+  const wasStopped = pendingStop;
+  pendingStop = false;
+  if (wasStopped && isIndependentApiMode(settings.promptGenerationMode)) {
+    logger.info(
+      `Skipping MESSAGE_RECEIVED for message ${messageId}: user stopped generation in independent-API mode; refusing to run LLM prompt-gen on partial content`
     );
     return;
   }

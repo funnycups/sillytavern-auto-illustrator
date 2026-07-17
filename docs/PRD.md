@@ -244,6 +244,55 @@ Result: No images generated automatically for the greeting.
 ❌ **DO NOT** ignore the `type` argument and treat every `MESSAGE_RECEIVED` as a fresh reply (causes greetings to trigger a full LLM prompt-gen cycle every time the chat is opened)
 ❌ **DO NOT** call the LLM to generate prompts for character greetings (they're static content authored by the character-card creator, not something the user just produced)
 
+### 3.6 Stop Handling
+
+**Desired behavior:** When the user hits Stop mid-generation, Independent API mode must not send the aborted partial content to the LLM. Shared API mode's in-flight image pipeline is left alone (the images already scheduled from streamed prompt tags continue to completion).
+
+**Requirements**
+
+**STOP-001**: Listen for `GENERATION_STOPPED` and record that the next `MESSAGE_RECEIVED` corresponds to an aborted generation.
+
+**STOP-002**: In Independent API mode, when the `MESSAGE_RECEIVED` that follows a `GENERATION_STOPPED` arrives, skip LLM prompt generation. Do not send partial content to the LLM.
+
+**STOP-003**: In Shared API mode, `GENERATION_STOPPED` does not change any behavior. Image generations already scheduled from prompt tags detected during streaming complete and are inserted.
+
+**STOP-004**: The stop signal is single-shot. It is consumed by the very next `MESSAGE_RECEIVED` regardless of mode, so a stop during one mode cannot leak into a later generation in a different mode.
+
+**Examples**
+
+**Example: Stop during Independent API mode**
+```
+User: sends message
+T+0s:  LLM starts streaming
+T+2s:  User hits Stop → GENERATION_STOPPED fires
+T+2s:  Aborted stream routes through onFinishStreaming
+T+2s:  MESSAGE_RECEIVED(N, 'normal') fires
+T+2s:  Extension consumes stop flag; skips LLM prompt-gen
+
+Result: No Luker call for prompts on the aborted partial.
+        User can regenerate normally on the next turn.
+```
+
+**Example: Stop during Shared API mode**
+```
+User: sends message
+T+0s:  LLM starts streaming, streaming monitor detects 2 prompt tags
+T+1s:  Both images start generating
+T+2s:  User hits Stop → GENERATION_STOPPED fires
+T+2s:  MESSAGE_RECEIVED(N, 'normal') fires
+T+2s:  Extension consumes stop flag but shared-api ignores it;
+       finalization runs normally
+T+4s:  Both images complete and insert into partial message
+
+Result: In-flight images finish. Contract: "内联生成不感知任何变化"
+```
+
+**Anti-Patterns**
+
+❌ **DO NOT** call the LLM in Independent API mode after user stops (violates user intent — Stop means stop)
+❌ **DO NOT** cancel the shared-api image pipeline on stop (breaks contract)
+❌ **DO NOT** let the stop flag persist across multiple `MESSAGE_RECEIVED` events (causes false skips on subsequent unrelated generations)
+
 ---
 
 ## 4. Manual Generation

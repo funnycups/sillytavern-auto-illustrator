@@ -9,6 +9,8 @@ import {
   handleGenerationEnded,
   handleChatChanged,
   cancelAllDelayedReconciliations,
+  notifyGenerationStopped,
+  resetPendingStopForTests,
 } from './message_handler';
 
 // Mock dependencies
@@ -226,6 +228,10 @@ describe('Message Handler V2', () => {
   });
 
   describe('handleMessageReceived - type filtering', () => {
+    beforeEach(() => {
+      resetPendingStopForTests();
+    });
+
     it('skips MESSAGE_RECEIVED with type=first_message', async () => {
       const {generatePromptsForMessage} = await import(
         './services/prompt_generation_service'
@@ -303,6 +309,97 @@ describe('Message Handler V2', () => {
 
       expect(mockSessionManager.getSession).toHaveBeenCalledWith(1);
       expect(mockSessionManager.startStreamingSession).toHaveBeenCalled();
+    });
+  });
+
+  describe('handleMessageReceived - stop flag (independent-API mode)', () => {
+    beforeEach(() => {
+      resetPendingStopForTests();
+      mockSettings.promptGenerationMode = 'independent-api';
+    });
+
+    it('skips MESSAGE_RECEIVED in independent-API mode after notifyGenerationStopped()', async () => {
+      const {generatePromptsForMessage} = await import(
+        './services/prompt_generation_service'
+      );
+      vi.mocked(generatePromptsForMessage).mockClear();
+      mockSessionManager.getSession.mockReturnValue(null);
+
+      notifyGenerationStopped();
+      await handleMessageReceived(1, mockContext, mockSettings, 'normal');
+
+      // Must not call LLM to generate prompts for the aborted partial content
+      expect(generatePromptsForMessage).not.toHaveBeenCalled();
+      expect(mockSessionManager.startStreamingSession).not.toHaveBeenCalled();
+    });
+
+    it('consumes the stop flag: subsequent MESSAGE_RECEIVED processes normally', async () => {
+      mockSessionManager.getSession.mockReturnValue(null);
+
+      notifyGenerationStopped();
+      // First call is skipped (consumes flag), so getSession never runs
+      await handleMessageReceived(1, mockContext, mockSettings, 'normal');
+      // Second call should process normally (flag was consumed)
+      await handleMessageReceived(2, mockContext, mockSettings, 'normal');
+
+      // getSession is the first thing handleMessageReceived does after
+      // the guards; if the second call reached it, the flag was consumed.
+      expect(mockSessionManager.getSession).toHaveBeenCalledTimes(1);
+      expect(mockSessionManager.getSession).toHaveBeenCalledWith(2);
+    });
+  });
+
+  describe('handleMessageReceived - stop flag (shared-api mode)', () => {
+    beforeEach(() => {
+      resetPendingStopForTests();
+      mockSettings.promptGenerationMode = 'shared-api';
+    });
+
+    it('does NOT skip MESSAGE_RECEIVED in shared-api mode after notifyGenerationStopped()', async () => {
+      // User said: "内联生成不感知任何变化" — shared-api mode ignores stop.
+      mockSessionManager.getSession.mockReturnValue(null);
+      mockSessionManager.startStreamingSession.mockResolvedValue({
+        sessionId: 's1',
+        messageId: 1,
+        type: 'streaming',
+      });
+
+      notifyGenerationStopped();
+      await handleMessageReceived(1, mockContext, mockSettings, 'normal');
+
+      expect(mockSessionManager.startStreamingSession).toHaveBeenCalledWith(
+        1,
+        mockContext,
+        mockSettings
+      );
+    });
+
+    it('still consumes the stop flag in shared-api mode so it does not leak into a later independent-API call', async () => {
+      mockSessionManager.getSession.mockReturnValue(null);
+      mockSessionManager.startStreamingSession.mockResolvedValue({
+        sessionId: 's1',
+        messageId: 1,
+        type: 'streaming',
+      });
+
+      // Stopped during shared-api generation. shared-api ignores the flag
+      // but MUST still consume it so it doesn't linger.
+      mockSettings.promptGenerationMode = 'shared-api';
+      notifyGenerationStopped();
+      await handleMessageReceived(1, mockContext, mockSettings, 'normal');
+
+      // Now user switches to independent-API and gets a fresh MESSAGE_RECEIVED.
+      // The stale flag from the earlier shared-api stop must not skip this one.
+      mockSettings.promptGenerationMode = 'independent-api';
+      await handleMessageReceived(2, mockContext, mockSettings, 'normal');
+
+      // Both calls should have passed the stop-flag guard and reached
+      // getSession. (Behaviour after getSession is mode-dependent and covered
+      // elsewhere; the point here is that neither call was gated out by a
+      // stale pendingStop.)
+      expect(mockSessionManager.getSession).toHaveBeenCalledTimes(2);
+      expect(mockSessionManager.getSession).toHaveBeenNthCalledWith(1, 1);
+      expect(mockSessionManager.getSession).toHaveBeenNthCalledWith(2, 2);
     });
   });
 

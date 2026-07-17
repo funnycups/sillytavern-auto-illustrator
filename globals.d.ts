@@ -50,6 +50,7 @@ declare global {
       CHAT_CHANGED: string;
       GENERATION_ENDED: string;
       GENERATION_STARTED: string;
+      GENERATION_STOPPED: string;
       MESSAGE_EDITED: string;
       MESSAGE_RECEIVED: string;
       MESSAGE_UPDATED: string;
