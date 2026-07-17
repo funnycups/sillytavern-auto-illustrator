@@ -932,12 +932,11 @@ After Response Completes:
 
 LLM Returns:
   ```
-  ---PROMPT-1---
-  prompt: medieval stone castle on hill, blue sky, detailed architecture
-  insertAfter: "The castle stands"
-  insertBefore: "tall on the hill"
-  reasoning: Opening scene description
-  ---PROMPT-END---
+  ---PROMPT---
+  TEXT: medieval stone castle on hill, blue sky, detailed architecture
+  INSERT_AFTER: The castle stands
+  INSERT_BEFORE: tall on the hill
+  ---END---
   ```
 
 Result:

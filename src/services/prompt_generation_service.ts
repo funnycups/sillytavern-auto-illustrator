@@ -55,8 +55,10 @@ ${currentMessageText}`;
  * TEXT: ...
  * INSERT_AFTER: ...
  * INSERT_BEFORE: ...
- * REASONING: ...
  * ---END---
+ *
+ * Any additional fields the model may emit (e.g. a legacy REASONING line)
+ * are silently ignored — they are not part of our output schema.
  *
  * @param llmResponse - Raw LLM response text
  * @returns Array of parsed prompt suggestions, or empty array if parsing fails
@@ -88,7 +90,6 @@ function parsePromptSuggestions(llmResponse: string): PromptSuggestion[] {
       const textMatch = blockContent.match(/^TEXT:\s*(.+?)$/m);
       const insertAfterMatch = blockContent.match(/^INSERT_AFTER:\s*(.+?)$/m);
       const insertBeforeMatch = blockContent.match(/^INSERT_BEFORE:\s*(.+?)$/m);
-      const reasoningMatch = blockContent.match(/^REASONING:\s*(.+?)$/m);
 
       // Check required fields
       if (!textMatch || !insertAfterMatch || !insertBeforeMatch) {
@@ -106,7 +107,6 @@ function parsePromptSuggestions(llmResponse: string): PromptSuggestion[] {
       const text = textMatch[1].trim();
       const insertAfter = insertAfterMatch[1].trim();
       const insertBefore = insertBeforeMatch[1].trim();
-      const reasoning = reasoningMatch ? reasoningMatch[1].trim() : undefined;
 
       // Check non-empty
       if (!text || !insertAfter || !insertBefore) {
@@ -125,7 +125,6 @@ function parsePromptSuggestions(llmResponse: string): PromptSuggestion[] {
         text,
         insertAfter,
         insertBefore,
-        reasoning,
       });
     }
 
@@ -265,7 +264,6 @@ export async function generatePromptsForMessage(
       text: s.text.substring(0, 60) + (s.text.length > 60 ? '...' : ''),
       after: s.insertAfter.substring(0, 30),
       before: s.insertBefore.substring(0, 30),
-      reasoning: s.reasoning,
     });
   });
 

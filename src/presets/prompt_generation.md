@@ -60,12 +60,10 @@ The user will provide input in this format:
 TEXT: your prompt here
 INSERT_AFTER: exact text before insertion
 INSERT_BEFORE: exact text after insertion
-REASONING: why this scene needs illustration
 ---PROMPT---
 TEXT: another prompt
 INSERT_AFTER: ...
 INSERT_BEFORE: ...
-REASONING: ...
 ---END---
 ```
 
@@ -78,8 +76,7 @@ REASONING: ...
    - No special escaping needed - newlines, quotes, any characters work naturally
    - Do NOT wrap in code blocks or add extra text
 2. **Unique Context Snippets**: Ensure INSERT_AFTER/INSERT_BEFORE combinations are unique and unambiguous
-3. **Always Include REASONING**: Helps understand why each scene was chosen
-4. **Complete All Fields**: Every prompt must have TEXT, INSERT_AFTER, INSERT_BEFORE, and REASONING
+3. **Complete All Fields**: Every prompt must have TEXT, INSERT_AFTER, and INSERT_BEFORE
 
 ## Example
 
@@ -99,12 +96,10 @@ She stepped into the rose garden. Her dress flowed in the breeze. They reached t
 TEXT: 1girl, long silver hair, blue eyes, white dress, standing in rose garden, surrounded by blooming roses, afternoon sunlight, gentle breeze, soft focus, highly detailed, best quality, masterpiece
 INSERT_AFTER: into the rose garden.
 INSERT_BEFORE: Her dress flowed in
-REASONING: Character Elena in garden setting - using context for her appearance (silver hair, blue eyes)
 ---PROMPT---
 TEXT: no humans, mountain lake, crystal clear water, snow-capped peaks, sunset, orange sky, reflections on water, scenic vista, highly detailed, 8k, masterpiece
 INSERT_AFTER: the mountain lake.
 INSERT_BEFORE: The water was perfectly
-REASONING: Landscape scene from current message - natural resting point in the journey
 ---END---
 ```
 

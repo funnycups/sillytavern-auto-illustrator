@@ -46,7 +46,6 @@ REASONING: Key visual scene
       expect(result[0].text).toBe('1girl, forest, moonlight, highly detailed');
       expect(result[0].insertAfter).toBe('through the forest');
       expect(result[0].insertBefore).toBe('under the moonlight');
-      expect(result[0].reasoning).toBe('Key visual scene');
     });
 
     it('should parse valid plain text response with multiple prompts', async () => {
@@ -412,12 +411,17 @@ REASONING: 中文测试
       expect(result[0].insertBefore).toBe('玫瑰盛开');
     });
 
-    it('should handle reasoning field being optional', async () => {
+    it('does not leak reasoning field into output even if LLM emits REASONING', async () => {
+      // Contract: REASONING is no longer part of our output schema. If the
+      // model still emits it (backward compat), the parser silently ignores
+      // it and the returned suggestion object must not carry a `reasoning`
+      // property.
       const messageText = 'Test message.';
       const llmResponse = `---PROMPT---
-TEXT: prompt without reasoning
+TEXT: test prompt
 INSERT_AFTER: test
 INSERT_BEFORE: message
+REASONING: this line must not appear in the output object
 ---END---`;
 
       vi.mocked(mockContext.generateTask!).mockResolvedValue({
@@ -431,8 +435,7 @@ INSERT_BEFORE: message
       );
 
       expect(result).toHaveLength(1);
-      expect(result[0].text).toBe('prompt without reasoning');
-      expect(result[0].reasoning).toBeUndefined();
+      expect('reasoning' in result[0]).toBe(false);
     });
 
     it('should handle markdown code blocks', async () => {

@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Remove REASONING from Independent API output schema** - The prompt-generation template no longer forces the model to emit a `REASONING:` line per prompt block
+  - Rationale: Coercing chain-of-thought into an output field tends to make the model treat it as boilerplate and cut corners on the actual work. If a user wants the model to think first, that's a user-prompt concern (e.g. instructing the model to write out its thinking at the start of the response), not something this extension's output schema should mandate
+  - Solution: `parsePromptSuggestions` drops the REASONING regex; `PromptSuggestion.reasoning` is removed from the type; `prompt_generation.md` template no longer lists REASONING in the output format, rules, or example
+  - Backward compat: if a model still emits `REASONING:` lines (older prompt or trained habit), the parser silently ignores them — the required fields (TEXT / INSERT_AFTER / INSERT_BEFORE) still parse correctly
+
 - **New-chat character greeting triggers image generation** - Fixed bug where switching or opening a chat immediately fires image generation for the character-card first message
   - Root cause: SillyTavern reuses `MESSAGE_RECEIVED` for multiple event sources (character greeting, slash-command inserts, other extensions, real LLM replies) and passes the source in the `type` parameter. The listener ignored `type`, treating every emission as a fresh LLM reply — in Independent API mode this even triggered a Luker call to generate prompts for the greeting
   - Solution: `handleMessageReceived` now takes the `type` argument and skips `first_message`, `command`, and `extension` sources (Luker `script.js:14284/14338`, `group-chats.js:330`, `slash-commands.js:6023/6028`, `stable-diffusion/index.js:5054`)

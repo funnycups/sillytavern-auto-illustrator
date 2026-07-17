@@ -17,8 +17,6 @@ export interface PromptSuggestion {
   insertAfter: string;
   /** Text snippet after insertion point (10-40 chars) */
   insertBefore: string;
-  /** Optional reasoning for why this prompt was suggested */
-  reasoning?: string;
 }
 
 /**

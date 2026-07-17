@@ -489,16 +489,5 @@ describe('prompt_insertion', () => {
 
       expect(isValidSuggestion(suggestion)).toBe(false);
     });
-
-    it('should return true even if reasoning is missing (optional field)', () => {
-      const suggestion: PromptSuggestion = {
-        text: 'forest scene',
-        insertAfter: 'through the forest',
-        insertBefore: 'under the moon',
-        // reasoning is undefined
-      };
-
-      expect(isValidSuggestion(suggestion)).toBe(true);
-    });
   });
 });
