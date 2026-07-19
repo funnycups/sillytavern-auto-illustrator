@@ -246,31 +246,43 @@ Result: No images generated automatically for the greeting.
 
 ### 3.6 Stop Handling
 
-**Desired behavior:** When the user hits Stop mid-generation, Independent API mode must not send the aborted partial content to the LLM. Shared API mode's in-flight image pipeline is left alone (the images already scheduled from streamed prompt tags continue to completion).
+**Desired behavior:** When the user hits Stop mid-generation, Independent API mode must not send the aborted partial content to the LLM. Shared API mode's in-flight image pipeline is left alone (the images already scheduled from streamed prompt tags continue to completion). A stop on one turn must never influence a later turn.
 
 **Requirements**
 
-**STOP-001**: Listen for `GENERATION_STOPPED` and record that the next `MESSAGE_RECEIVED` corresponds to an aborted generation.
+**STOP-001**: In Independent API mode, when a `MESSAGE_RECEIVED` arrives for a generation whose runtime abort signal is set (i.e. the user hit Stop), skip LLM prompt generation. Do not send partial content to the LLM.
 
-**STOP-002**: In Independent API mode, when the `MESSAGE_RECEIVED` that follows a `GENERATION_STOPPED` arrives, skip LLM prompt generation. Do not send partial content to the LLM.
+**STOP-002**: In Shared API mode, an aborted generation does not change any behavior. Image generations already scheduled from prompt tags detected during streaming complete and are inserted.
 
-**STOP-003**: In Shared API mode, `GENERATION_STOPPED` does not change any behavior. Image generations already scheduled from prompt tags detected during streaming complete and are inserted.
+**STOP-003**: The abort determination is per-generation, not persistent state. It reflects the current generation's `AbortController.signal.aborted` at the moment `MESSAGE_RECEIVED` fires. It cannot influence any earlier or later turn.
 
-**STOP-004**: The stop signal is single-shot. It is consumed by the very next `MESSAGE_RECEIVED` regardless of mode, so a stop during one mode cannot leak into a later generation in a different mode.
+**STOP-004**: When a stop produces no `MESSAGE_RECEIVED` at all (e.g. non-streaming generations, where SillyTavern/Luker's `onError` unblocks and rethrows without emitting), no action is required and no state must be carried over to the next generation.
 
 **Examples**
 
-**Example: Stop during Independent API mode**
+**Example: Stop during Independent API mode (streaming)**
 ```
 User: sends message
 T+0s:  LLM starts streaming
-T+2s:  User hits Stop → GENERATION_STOPPED fires
+T+2s:  User hits Stop → abortController.abort()
 T+2s:  Aborted stream routes through onFinishStreaming
-T+2s:  MESSAGE_RECEIVED(N, 'normal') fires
-T+2s:  Extension consumes stop flag; skips LLM prompt-gen
+T+2s:  MESSAGE_RECEIVED(N, 'normal') fires; signal.aborted === true
+T+2s:  Extension reads the aborted signal; skips LLM prompt-gen
 
 Result: No Luker call for prompts on the aborted partial.
         User can regenerate normally on the next turn.
+```
+
+**Example: Stop during Independent API mode (non-streaming)**
+```
+User: sends message
+T+0s:  Generate() sends the request; awaits sendGenerationRequest
+T+2s:  User hits Stop → abortController.abort()
+T+2s:  fetch throws AbortError → Generate()'s onError unblocks and rethrows
+       (no MESSAGE_RECEIVED is emitted for the aborted turn)
+
+Result: Extension does nothing for the aborted turn. No cross-event
+        state is set, so the next fresh MESSAGE_RECEIVED processes normally.
 ```
 
 **Example: Stop during Shared API mode**
@@ -278,9 +290,9 @@ Result: No Luker call for prompts on the aborted partial.
 User: sends message
 T+0s:  LLM starts streaming, streaming monitor detects 2 prompt tags
 T+1s:  Both images start generating
-T+2s:  User hits Stop → GENERATION_STOPPED fires
-T+2s:  MESSAGE_RECEIVED(N, 'normal') fires
-T+2s:  Extension consumes stop flag but shared-api ignores it;
+T+2s:  User hits Stop → abortController.abort()
+T+2s:  MESSAGE_RECEIVED(N, 'normal') fires; signal.aborted === true
+T+2s:  Extension does not check the signal in shared-api mode;
        finalization runs normally
 T+4s:  Both images complete and insert into partial message
 
@@ -291,7 +303,7 @@ Result: In-flight images finish. Contract: "内联生成不感知任何变化"
 
 ❌ **DO NOT** call the LLM in Independent API mode after user stops (violates user intent — Stop means stop)
 ❌ **DO NOT** cancel the shared-api image pipeline on stop (breaks contract)
-❌ **DO NOT** let the stop flag persist across multiple `MESSAGE_RECEIVED` events (causes false skips on subsequent unrelated generations)
+❌ **DO NOT** latch a flag on `GENERATION_STOPPED` and consume it on the next `MESSAGE_RECEIVED` — non-streaming stops never emit `MESSAGE_RECEIVED`, so the flag lingers and false-skips a later unrelated generation. Read the current abort signal directly instead; it is single-shot by construction because each generation owns its own `AbortController`
 
 ---
 

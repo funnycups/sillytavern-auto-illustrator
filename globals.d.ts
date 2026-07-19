@@ -50,7 +50,6 @@ declare global {
       CHAT_CHANGED: string;
       GENERATION_ENDED: string;
       GENERATION_STARTED: string;
-      GENERATION_STOPPED: string;
       MESSAGE_EDITED: string;
       MESSAGE_RECEIVED: string;
       MESSAGE_UPDATED: string;
@@ -136,6 +135,14 @@ declare global {
     >;
     getPresetManager?(apiId: string): {
       getAllPresets(): string[];
+    } | null;
+    // Live streaming state exposed by Luker/SillyTavern's Generate(). Set to
+    // a StreamingProcessor instance while a streaming reply is in flight,
+    // reset to null once Generate() finishes (`script.js:8936, 9151`). We
+    // read `abortController.signal.aborted` inside MESSAGE_RECEIVED to
+    // detect user-initiated stops without needing a cross-event flag.
+    streamingProcessor?: {
+      abortController?: {signal?: {aborted?: boolean}};
     } | null;
   }
   /* eslint-enable @typescript-eslint/no-explicit-any */

@@ -45,38 +45,24 @@ const SKIPPED_MESSAGE_RECEIVED_TYPES = new Set([
 ]);
 
 /**
- * Flag latched by GENERATION_STOPPED, consumed by the next MESSAGE_RECEIVED.
+ * Reads whether the current generation was aborted by the user, straight
+ * from the runtime `streamingProcessor.abortController.signal`.
  *
- * When a user aborts streaming, `stopGeneration()` emits GENERATION_STOPPED
- * BEFORE `onFinishStreaming` emits MESSAGE_RECEIVED (`script.js:9190` runs
- * synchronously in the stop handler; the abort then unwinds the streaming
- * generator so `onFinishStreaming` runs on the next microtasks). We latch
- * this so the following MESSAGE_RECEIVED can tell the difference between
- * "message finished naturally" and "user hit stop, this is a partial".
+ * This replaces an older flag-based scheme (latch on GENERATION_STOPPED,
+ * consume on next MESSAGE_RECEIVED). The flag leaked whenever a stop was
+ * NOT followed by MESSAGE_RECEIVED — most importantly the non-streaming
+ * path: `stopGeneration()` (Luker `script.js:9160`) aborts the fetch,
+ * `Generate()`'s `onError` (`script.js:9128`) only unblocks + rethrows,
+ * and MESSAGE_RECEIVED is never emitted. A latched flag would then
+ * false-skip the NEXT fresh reply.
  *
- * Only independent-API mode consumes the flag to skip processing (because
- * skipping means "don't send the partial to the LLM"). Shared-API mode
- * ignores the flag but still consumes it — the user's contract is
- * "内联生成不感知任何变化", and consuming keeps the state single-shot so a
- * shared-api stop cannot leak into a later independent-api generation.
+ * Reading the signal at MESSAGE_RECEIVED is single-shot by construction:
+ * each generation owns its own `AbortController`, so there is no
+ * cross-event state to leak. Mirrors Luker's own memory-graph pattern
+ * (`extensions/memory-graph/main.js:15116-15128`).
  */
-let pendingStop = false;
-
-/**
- * Records that GENERATION_STOPPED just fired. Called from index.ts's event
- * listener. The flag is single-shot: the next MESSAGE_RECEIVED consumes it.
- */
-export function notifyGenerationStopped(): void {
-  pendingStop = true;
-  logger.debug('GENERATION_STOPPED latched (pendingStop=true)');
-}
-
-/**
- * Test-only helper: clears the pendingStop flag between tests.
- * Not part of the runtime contract.
- */
-export function resetPendingStopForTests(): void {
-  pendingStop = false;
+function isCurrentGenerationAborted(context: SillyTavernContext): boolean {
+  return Boolean(context.streamingProcessor?.abortController?.signal?.aborted);
 }
 
 /**
@@ -219,11 +205,20 @@ export async function handleMessageReceived(
     return;
   }
 
-  // Consume the stop flag regardless of mode so it stays single-shot.
-  // Only independent-API mode acts on it (see comment on `pendingStop`).
-  const wasStopped = pendingStop;
-  pendingStop = false;
-  if (wasStopped && isIndependentApiMode(settings.promptGenerationMode)) {
+  // Independent-API mode must not send aborted partial content to the LLM.
+  // Read the abort signal directly from `context.streamingProcessor` — the
+  // same source of truth Luker's Generate() checks via
+  // `this.abortController.signal.aborted` inside onFinishStreaming
+  // (`script.js:6505`). See `isCurrentGenerationAborted` for why we don't
+  // latch a flag on GENERATION_STOPPED instead.
+  //
+  // Shared-API mode intentionally does not check this — the contract
+  // "内联生成不感知任何变化" means in-flight images scheduled from prompt
+  // tags detected during streaming continue to finalization.
+  if (
+    isIndependentApiMode(settings.promptGenerationMode) &&
+    isCurrentGenerationAborted(context)
+  ) {
     logger.info(
       `Skipping MESSAGE_RECEIVED for message ${messageId}: user stopped generation in independent-API mode; refusing to run LLM prompt-gen on partial content`
     );

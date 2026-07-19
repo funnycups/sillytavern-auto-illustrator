@@ -14,7 +14,6 @@ import {
   handleStreamTokenStarted,
   handleMessageReceived,
   handleGenerationEnded,
-  notifyGenerationStopped,
 } from './message_handler';
 import {addImageClickHandlers} from './manual_generation';
 import {
@@ -1439,28 +1438,6 @@ function registerEventHandlers(): void {
     handleGenerationEnded(messageId, context, settings);
   });
 
-  // GENERATION_STOPPED fires when the user hits Stop. SillyTavern still
-  // routes the aborted stream through onFinishStreaming -> MESSAGE_RECEIVED
-  // (because isFinished=true but isStopped stays false — see script.js
-  // ~6577), so extensions can't tell "finished naturally" from "aborted".
-  // We latch a single-shot flag here and let handleMessageReceived decide
-  // what to do with it per mode (independent-API refuses to send the
-  // partial to the LLM; shared-api leaves the in-flight image pipeline
-  // alone per user contract).
-  const GENERATION_STOPPED = context.eventTypes.GENERATION_STOPPED;
-  if (GENERATION_STOPPED) {
-    context.eventSource.on(GENERATION_STOPPED, () => {
-      if (!settings.enabled) {
-        return;
-      }
-      notifyGenerationStopped();
-    });
-  } else {
-    logger.warn(
-      'GENERATION_STOPPED event type not available; stop-during-independent-API will still trigger LLM prompt-gen on partial content'
-    );
-  }
-
   // Chat history pruning and meta-prompt injection
   const CHAT_COMPLETION_PROMPT_READY =
     context.eventTypes.CHAT_COMPLETION_PROMPT_READY;
@@ -1545,7 +1522,6 @@ function registerEventHandlers(): void {
     MESSAGE_UPDATED,
     GENERATION_STARTED,
     GENERATION_ENDED,
-    GENERATION_STOPPED,
     CHAT_COMPLETION_PROMPT_READY,
   });
 }

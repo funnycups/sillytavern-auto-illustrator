@@ -9,8 +9,6 @@ import {
   handleGenerationEnded,
   handleChatChanged,
   cancelAllDelayedReconciliations,
-  notifyGenerationStopped,
-  resetPendingStopForTests,
 } from './message_handler';
 
 // Mock dependencies
@@ -228,10 +226,6 @@ describe('Message Handler V2', () => {
   });
 
   describe('handleMessageReceived - type filtering', () => {
-    beforeEach(() => {
-      resetPendingStopForTests();
-    });
-
     it('skips MESSAGE_RECEIVED with type=first_message', async () => {
       const {generatePromptsForMessage} = await import(
         './services/prompt_generation_service'
@@ -312,20 +306,26 @@ describe('Message Handler V2', () => {
     });
   });
 
-  describe('handleMessageReceived - stop flag (independent-API mode)', () => {
+  describe('handleMessageReceived - abort signal (independent-API mode)', () => {
     beforeEach(() => {
-      resetPendingStopForTests();
       mockSettings.promptGenerationMode = 'independent-api';
     });
 
-    it('skips MESSAGE_RECEIVED in independent-API mode after notifyGenerationStopped()', async () => {
+    it('skips MESSAGE_RECEIVED when streamingProcessor.abortController.signal.aborted is true', async () => {
       const {generatePromptsForMessage} = await import(
         './services/prompt_generation_service'
       );
       vi.mocked(generatePromptsForMessage).mockClear();
       mockSessionManager.getSession.mockReturnValue(null);
 
-      notifyGenerationStopped();
+      // User hit Stop mid-generation. Luker's Generate() calls
+      // abortController.abort() and MESSAGE_RECEIVED for the partial content
+      // fires with the signal already aborted (script.js:6505 reads this
+      // exact field inside onFinishStreaming).
+      mockContext.streamingProcessor = {
+        abortController: {signal: {aborted: true}},
+      };
+
       await handleMessageReceived(1, mockContext, mockSettings, 'normal');
 
       // Must not call LLM to generate prompts for the aborted partial content
@@ -333,30 +333,76 @@ describe('Message Handler V2', () => {
       expect(mockSessionManager.startStreamingSession).not.toHaveBeenCalled();
     });
 
-    it('consumes the stop flag: subsequent MESSAGE_RECEIVED processes normally', async () => {
+    it('processes MESSAGE_RECEIVED when streamingProcessor is null (fresh non-streaming reply)', async () => {
+      const {generatePromptsForMessage} = await import(
+        './services/prompt_generation_service'
+      );
+      vi.mocked(generatePromptsForMessage).mockClear();
       mockSessionManager.getSession.mockReturnValue(null);
 
-      notifyGenerationStopped();
-      // First call is skipped (consumes flag), so getSession never runs
-      await handleMessageReceived(1, mockContext, mockSettings, 'normal');
-      // Second call should process normally (flag was consumed)
-      await handleMessageReceived(2, mockContext, mockSettings, 'normal');
+      // Non-streaming path never sets streamingProcessor. This must not be
+      // interpreted as "aborted".
+      mockContext.streamingProcessor = null;
 
-      // getSession is the first thing handleMessageReceived does after
-      // the guards; if the second call reached it, the flag was consumed.
-      expect(mockSessionManager.getSession).toHaveBeenCalledTimes(1);
-      expect(mockSessionManager.getSession).toHaveBeenCalledWith(2);
+      await handleMessageReceived(1, mockContext, mockSettings, 'normal');
+
+      // Reached the LLM prompt-gen path, i.e. was NOT skipped by the abort
+      // guard. (Downstream mocks return empty prompts so the flow bails
+      // before startStreamingSession — that's independent of the guard.)
+      expect(generatePromptsForMessage).toHaveBeenCalled();
+    });
+
+    it('processes MESSAGE_RECEIVED when abort signal is not aborted', async () => {
+      const {generatePromptsForMessage} = await import(
+        './services/prompt_generation_service'
+      );
+      vi.mocked(generatePromptsForMessage).mockClear();
+      mockSessionManager.getSession.mockReturnValue(null);
+
+      mockContext.streamingProcessor = {
+        abortController: {signal: {aborted: false}},
+      };
+
+      await handleMessageReceived(1, mockContext, mockSettings, 'normal');
+
+      expect(generatePromptsForMessage).toHaveBeenCalled();
+    });
+
+    it('does not leak across generations: a stopped generation with no MESSAGE_RECEIVED does not affect the next fresh reply', async () => {
+      // The bug the user reported: non-streaming stops never emit
+      // MESSAGE_RECEIVED (Luker `script.js:9128-9153` onError only unblocks
+      // + rethrows), so any latched flag would leak past the aborted turn
+      // and false-skip the next fresh reply. Reading the abort signal on
+      // the current context sidesteps this entirely: each generation owns
+      // its own AbortController, so there is no cross-event state to leak.
+      const {generatePromptsForMessage} = await import(
+        './services/prompt_generation_service'
+      );
+      vi.mocked(generatePromptsForMessage).mockClear();
+      mockSessionManager.getSession.mockReturnValue(null);
+
+      // Fresh generation completes normally. streamingProcessor for the
+      // fresh reply is either null (Generate() cleaned up) or exists with
+      // a non-aborted signal. We use null here — the non-streaming case.
+      mockContext.streamingProcessor = null;
+
+      await handleMessageReceived(1, mockContext, mockSettings, 'normal');
+
+      // Must proceed to LLM prompt-gen — the earlier stop cannot influence
+      // this delivery.
+      expect(generatePromptsForMessage).toHaveBeenCalled();
     });
   });
 
-  describe('handleMessageReceived - stop flag (shared-api mode)', () => {
+  describe('handleMessageReceived - abort signal (shared-api mode)', () => {
     beforeEach(() => {
-      resetPendingStopForTests();
       mockSettings.promptGenerationMode = 'shared-api';
     });
 
-    it('does NOT skip MESSAGE_RECEIVED in shared-api mode after notifyGenerationStopped()', async () => {
-      // User said: "内联生成不感知任何变化" — shared-api mode ignores stop.
+    it('does NOT skip MESSAGE_RECEIVED when aborted in shared-api mode', async () => {
+      // Contract "内联生成不感知任何变化": in-flight images scheduled from
+      // prompt tags detected during streaming must reach finalization even
+      // when the underlying generation was stopped.
       mockSessionManager.getSession.mockReturnValue(null);
       mockSessionManager.startStreamingSession.mockResolvedValue({
         sessionId: 's1',
@@ -364,7 +410,10 @@ describe('Message Handler V2', () => {
         type: 'streaming',
       });
 
-      notifyGenerationStopped();
+      mockContext.streamingProcessor = {
+        abortController: {signal: {aborted: true}},
+      };
+
       await handleMessageReceived(1, mockContext, mockSettings, 'normal');
 
       expect(mockSessionManager.startStreamingSession).toHaveBeenCalledWith(
@@ -372,34 +421,6 @@ describe('Message Handler V2', () => {
         mockContext,
         mockSettings
       );
-    });
-
-    it('still consumes the stop flag in shared-api mode so it does not leak into a later independent-API call', async () => {
-      mockSessionManager.getSession.mockReturnValue(null);
-      mockSessionManager.startStreamingSession.mockResolvedValue({
-        sessionId: 's1',
-        messageId: 1,
-        type: 'streaming',
-      });
-
-      // Stopped during shared-api generation. shared-api ignores the flag
-      // but MUST still consume it so it doesn't linger.
-      mockSettings.promptGenerationMode = 'shared-api';
-      notifyGenerationStopped();
-      await handleMessageReceived(1, mockContext, mockSettings, 'normal');
-
-      // Now user switches to independent-API and gets a fresh MESSAGE_RECEIVED.
-      // The stale flag from the earlier shared-api stop must not skip this one.
-      mockSettings.promptGenerationMode = 'independent-api';
-      await handleMessageReceived(2, mockContext, mockSettings, 'normal');
-
-      // Both calls should have passed the stop-flag guard and reached
-      // getSession. (Behaviour after getSession is mode-dependent and covered
-      // elsewhere; the point here is that neither call was gated out by a
-      // stale pendingStop.)
-      expect(mockSessionManager.getSession).toHaveBeenCalledTimes(2);
-      expect(mockSessionManager.getSession).toHaveBeenNthCalledWith(1, 1);
-      expect(mockSessionManager.getSession).toHaveBeenNthCalledWith(2, 2);
     });
   });
 
