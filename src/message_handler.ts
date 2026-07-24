@@ -177,6 +177,122 @@ export async function handleStreamTokenStarted(
 }
 
 /**
+ * Runs the Independent-API image-prompt pipeline against a single message:
+ * calls the second LLM to produce prompt suggestions, inserts them as tags
+ * into the message, saves the chat, and starts an image-generation session.
+ *
+ * Shared by two callers:
+ *   - `handleMessageReceived` (automatic MESSAGE_RECEIVED trigger)
+ *   - the wand-menu manual trigger (see `wand_menu.ts`)
+ *
+ * Caller preconditions (not re-validated here):
+ *   - `messageId` references an existing chat entry
+ *   - the message is an assistant reply (not user, not system)
+ *   - no active streaming session exists for this message
+ *
+ * The empty-message short-circuit lives inside `generatePromptsForMessage`
+ * (returns `[]` for whitespace-only input), so callers don't need to
+ * pre-check text content.
+ */
+export async function runIndependentPipelineForMessage(
+  messageId: number,
+  context: SillyTavernContext,
+  settings: AutoIllustratorSettings
+): Promise<void> {
+  const message = context.chat?.[messageId];
+  if (!message) {
+    // Caller-contract violation — both call sites (handler, wand button)
+    // must validate the message exists before invoking. Log at error level
+    // so this surfaces if it ever fires.
+    logger.error(
+      `runIndependentPipelineForMessage: chat[${messageId}] missing — caller contract violated`
+    );
+    return;
+  }
+
+  logger.info('LLM-based prompt generation enabled, generating prompts...');
+
+  try {
+    // Step 1: Call LLM to generate prompts
+    const prompts = await generatePromptsForMessage(
+      message.mes,
+      context,
+      settings
+    );
+
+    if (prompts.length === 0) {
+      logger.info('LLM returned no prompts, skipping image generation');
+      return;
+    }
+
+    logger.info(`LLM generated ${prompts.length} prompts`);
+
+    // Step 2: Insert prompt tags into message using context matching
+    const tagTemplate = settings.promptDetectionPatterns[0];
+    const insertionResult = insertPromptTagsWithContext(
+      message.mes,
+      prompts,
+      tagTemplate
+    );
+
+    // Step 2b: Fallback for failed suggestions - append at end
+    let finalText = insertionResult.updatedText;
+    let totalInserted = insertionResult.insertedCount;
+
+    if (insertionResult.failedSuggestions.length > 0) {
+      logger.warn(
+        `Failed to insert ${insertionResult.failedSuggestions.length} prompts (context not found), appending at end`
+      );
+
+      // Append failed prompts at the end of the message
+      const promptTagTemplate = tagTemplate.includes('{PROMPT}')
+        ? tagTemplate
+        : '<!--img-prompt="{PROMPT}"-->';
+
+      for (const failed of insertionResult.failedSuggestions) {
+        const promptTag = promptTagTemplate.replace('{PROMPT}', failed.text);
+        finalText += ` ${promptTag}`;
+        totalInserted++;
+        logger.debug(
+          `Appended failed prompt at end: "${failed.text.substring(0, 50)}..."`
+        );
+      }
+    }
+
+    if (totalInserted === 0) {
+      logger.warn('No prompts generated or inserted');
+      toastr.warning(
+        'Failed to generate image prompts (LLM returned no valid prompts)',
+        'Warning'
+      );
+      return;
+    }
+
+    // Step 3: Save updated message with prompt tags
+    message.mes = finalText;
+    await saveChat();
+    logger.info(
+      `Inserted ${totalInserted} prompt tags into message (${insertionResult.failedSuggestions.length} appended at end)`
+    );
+  } catch (error) {
+    logger.error('LLM prompt generation failed:', error);
+    toastr.warning('Failed to generate image prompts', 'Warning');
+    return;
+  }
+
+  // Step 4: Start a session so images actually get generated from the tags.
+  try {
+    await sessionManager.startStreamingSession(messageId, context, settings);
+    sessionManager.setupStreamingCompletion(messageId, context, settings);
+    logger.info(
+      `Started non-streaming session for message ${messageId}, will auto-finalize when images complete`
+    );
+  } catch (error) {
+    logger.error(`Error processing non-streaming message ${messageId}:`, error);
+  }
+}
+
+/**
  * Handles MESSAGE_RECEIVED event
  * Finalizes streaming session if active, otherwise processes complete message
  *
@@ -254,91 +370,16 @@ export async function handleMessageReceived(
       `No active session for message ${messageId}, processing as non-streaming message`
     );
 
-    // Check if LLM-based prompt generation is enabled
     if (isIndependentApiMode(settings.promptGenerationMode)) {
-      logger.info('LLM-based prompt generation enabled, generating prompts...');
-
-      try {
-        // Step 1: Call LLM to generate prompts
-        const prompts = await generatePromptsForMessage(
-          message.mes,
-          context,
-          settings
-        );
-
-        if (prompts.length === 0) {
-          logger.info('LLM returned no prompts, skipping image generation');
-          return;
-        }
-
-        logger.info(`LLM generated ${prompts.length} prompts`);
-
-        // Step 2: Insert prompt tags into message using context matching
-        const tagTemplate = settings.promptDetectionPatterns[0];
-        const insertionResult = insertPromptTagsWithContext(
-          message.mes,
-          prompts,
-          tagTemplate
-        );
-
-        // Step 2b: Fallback for failed suggestions - append at end
-        let finalText = insertionResult.updatedText;
-        let totalInserted = insertionResult.insertedCount;
-
-        if (insertionResult.failedSuggestions.length > 0) {
-          logger.warn(
-            `Failed to insert ${insertionResult.failedSuggestions.length} prompts (context not found), appending at end`
-          );
-
-          // Append failed prompts at the end of the message
-          const promptTagTemplate = tagTemplate.includes('{PROMPT}')
-            ? tagTemplate
-            : '<!--img-prompt="{PROMPT}"-->';
-
-          for (const failed of insertionResult.failedSuggestions) {
-            const promptTag = promptTagTemplate.replace(
-              '{PROMPT}',
-              failed.text
-            );
-            finalText += ` ${promptTag}`;
-            totalInserted++;
-            logger.debug(
-              `Appended failed prompt at end: "${failed.text.substring(0, 50)}..."`
-            );
-          }
-        }
-
-        if (totalInserted === 0) {
-          logger.warn('No prompts generated or inserted');
-          toastr.warning(
-            'Failed to generate image prompts (LLM returned no valid prompts)',
-            'Warning'
-          );
-          return;
-        }
-
-        // Step 3: Save updated message with prompt tags
-        message.mes = finalText;
-        await saveChat();
-        logger.info(
-          `Inserted ${totalInserted} prompt tags into message (${insertionResult.failedSuggestions.length} appended at end)`
-        );
-      } catch (error) {
-        logger.error('LLM prompt generation failed:', error);
-        toastr.warning('Failed to generate image prompts', 'Warning');
-        return;
-      }
+      await runIndependentPipelineForMessage(messageId, context, settings);
+      return;
     }
 
-    // Process message with prompts (works for both regex and LLM modes)
+    // Shared-API / regex mode: prompt tags are already in message.mes,
+    // just start the session so images get generated for them.
     try {
-      // Start a new streaming session with the complete message
       await sessionManager.startStreamingSession(messageId, context, settings);
-
-      // Set up one-time completion listener to auto-finalize when all images are done
-      // This ensures images are generated BEFORE we try to insert them
       sessionManager.setupStreamingCompletion(messageId, context, settings);
-
       logger.info(
         `Started non-streaming session for message ${messageId}, will auto-finalize when images complete`
       );
