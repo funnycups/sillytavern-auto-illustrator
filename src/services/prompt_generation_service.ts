@@ -286,12 +286,19 @@ export async function generatePromptsForMessage(
     promptWritingGuidelines
   );
 
-  // Replace MEMORY_RECALL with the previous recall packet from Luker's
-  // memory-graph, if available. Silently expands to empty on standard ST
-  // or when no recall has run yet — no fallback, no dangling section.
+  // Splice the memory-graph recall block directly into the system prompt,
+  // immediately before `## Instructions`. Kept out of the template file so
+  // prompt_generation.md stays a pure task spec — nothing in the on-disk
+  // preset references memory-graph. When there is nothing to inject, the
+  // template is untouched.
   const recallProjection = await fetchLastRecallProjection(context);
   const recallBlock = buildRecallBlock(recallProjection);
-  systemPrompt = systemPrompt.replace('{{MEMORY_RECALL}}', recallBlock);
+  if (recallBlock) {
+    systemPrompt = systemPrompt.replace(
+      '## Instructions',
+      `${recallBlock}\n## Instructions`
+    );
+  }
 
   // Build user prompt with context and current message
   const contextMessageCount = settings.contextMessageCount || 10;

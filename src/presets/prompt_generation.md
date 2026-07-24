@@ -20,8 +20,6 @@ The user will provide input in this format:
 [The message to generate prompts for]
 ```
 
-{{MEMORY_RECALL}}
-
 ## Instructions
 
 1. **Understand Context**: Read the context to understand:

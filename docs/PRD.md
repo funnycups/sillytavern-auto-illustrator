@@ -890,11 +890,11 @@ Result:
 
 **Memory-graph recall integration (Luker only):**
 - When running against Luker with the `memory-graph` extension loaded and a recall pass has completed for the current chat, the system prompt includes a "Memory Recall Context" section.
-- The section is inserted before `## Instructions` in the template (via the `{{MEMORY_RECALL}}` placeholder in `src/presets/prompt_generation.md`).
+- The section is spliced into the system prompt at build time by `generatePromptsForMessage`, positioned immediately before `## Instructions`. Kept out of the on-disk template (`src/presets/prompt_generation.md`) so the preset itself never references memory-graph.
 - Content is the exact `corePacket` + `focusPacket` text that memory-graph handed to the main LLM during the previous recall pass, retrieved via `memory-graph.getLastRecallProjection(context)`.
 - Rendered as two H3 sub-blocks: `### Always-Injected` (from `corePacket`) and `### Recall-Selected` (from `focusPacket`). Empty packets collapse their sub-block; both empty collapses the whole section.
 - No settings toggle — auto-enabled on Luker.
-- On standard SillyTavern (no `context.getExtensionApi`), or when memory-graph is not installed, or when no recall has run yet, the `{{MEMORY_RECALL}}` placeholder collapses to empty. No dangling section header, no error to the user.
+- On standard SillyTavern (no `context.getExtensionApi`), or when memory-graph is not installed, or when no recall has run yet, no splice happens and the system prompt is bit-identical to what it would be with memory-graph absent. No dangling section header, no error to the user.
 
 ### 9.5 Examples
 
