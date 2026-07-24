@@ -23,6 +23,55 @@ describe('prompt_generation_service', () => {
   });
 
   describe('generatePromptsForMessage', () => {
+    describe('empty-message short-circuit', () => {
+      it('returns [] and does not call generateTask for empty string', async () => {
+        const result = await generatePromptsForMessage(
+          '',
+          mockContext,
+          mockSettings
+        );
+
+        expect(result).toEqual([]);
+        expect(mockContext.generateTask).not.toHaveBeenCalled();
+      });
+
+      it('returns [] and does not call generateTask for whitespace-only string', async () => {
+        const result = await generatePromptsForMessage(
+          '   \n\t  \r\n',
+          mockContext,
+          mockSettings
+        );
+
+        expect(result).toEqual([]);
+        expect(mockContext.generateTask).not.toHaveBeenCalled();
+      });
+
+      it('returns [] and does not call generateTask when messageText is undefined', async () => {
+        const result = await generatePromptsForMessage(
+          undefined as unknown as string,
+          mockContext,
+          mockSettings
+        );
+
+        expect(result).toEqual([]);
+        expect(mockContext.generateTask).not.toHaveBeenCalled();
+      });
+
+      it('empty-message short-circuit runs before Luker-availability check', async () => {
+        // Give a context without generateTask — normally this would throw,
+        // but the empty-message guard runs first and returns [].
+        const bareContext = {} as SillyTavernContext;
+
+        const result = await generatePromptsForMessage(
+          '',
+          bareContext,
+          mockSettings
+        );
+
+        expect(result).toEqual([]);
+      });
+    });
+
     it('should parse valid plain text response with single prompt', async () => {
       const messageText = 'She walked through the forest under the moonlight.';
       const llmResponse = `---PROMPT---

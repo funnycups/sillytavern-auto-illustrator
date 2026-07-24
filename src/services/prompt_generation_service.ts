@@ -167,6 +167,14 @@ export async function generatePromptsForMessage(
   context: SillyTavernContext,
   settings: AutoIllustratorSettings
 ): Promise<PromptSuggestion[]> {
+  // Empty-message short-circuit: skip the LLM call entirely for
+  // whitespace-only input. Applies to both the automatic MESSAGE_RECEIVED
+  // path and the wand-menu manual trigger, since both funnel through here.
+  if (!messageText || messageText.trim() === '') {
+    logger.info('Skipping prompt generation: message text is empty');
+    return [];
+  }
+
   logger.info('Generating image prompts using separate LLM call');
   logger.debug(`Message length: ${messageText.length} characters`);
 
