@@ -9,11 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Memory-graph recall context in Independent-API prompt** - When running against Luker with the `memory-graph` extension loaded, the second-API system prompt now includes a "Memory Recall Context" section carrying the exact `corePacket` + `focusPacket` text from the previous recall pass (via `memory-graph.getLastRecallProjection`). The section is placed before `## Instructions`. No settings toggle — auto-enabled on Luker; silently omitted on standard SillyTavern or when no recall has run yet.
+- **Wand-menu manual trigger for last message** - New magic-wand icon in SillyTavern's `#extensionsMenu` runs the Independent-API pipeline against the last assistant message. Icon appears only when the extension is enabled AND `promptGenerationMode` is `independent-api`; removed from the DOM otherwise. Toasts surface streaming-guard, no-message, and empty-message conditions.
 - **Luker preset & API reuse for Independent API mode** - The standalone LLM call now routes through Luker's `context.generateTask`, exposing two new settings:
   - **Connection Profile**: pick a Luker connection-manager profile to choose the provider/model/endpoint
   - **Chat Completion Preset**: pick a Luker chat-completion preset (temperature, prompt post-processing, etc.)
   - Both default to "(Current configuration)" — leaving them empty preserves the chat's existing API/preset
   - Independent API mode now requires Luker; a startup toast surfaces the dependency if `context.generateTask` is missing
+
+### Changed
+
+- **Skip second-API call for empty messages** - Independent-API mode now short-circuits in `generatePromptsForMessage` when the assistant message text is empty (whitespace-only). Applies to both the automatic MESSAGE_RECEIVED path and the new wand-menu manual trigger.
+- **`runIndependentPipelineForMessage` extracted from `handleMessageReceived`** - Internal refactor to let the automatic MESSAGE_RECEIVED handler and the wand-menu manual trigger share one pipeline function. No behaviour change to the automatic path.
 
 ### Fixed
 

@@ -311,106 +311,94 @@ Result: In-flight images finish. Contract: "内联生成不感知任何变化"
 
 ### 4.1 Desired Behavior
 
-**Users can manually generate images for messages that have image prompts but no images, or regenerate all images for a message.**
+**When Independent-API mode is active, users can manually run the second-API image-prompt pipeline against the last assistant message by clicking a wand-menu icon.**
+
+The manual trigger runs the same pipeline as the automatic MESSAGE_RECEIVED path, so behaviour (prompt generation, tag insertion, image generation) matches exactly. The icon is only present when the pipeline can meaningfully run.
 
 ### 4.2 Requirements
 
-**MANUAL-001**: Show a generation button on messages that contain image prompts
+**MANUAL-001**: Register a wand-menu icon (`fa-wand-magic-sparkles`) in SillyTavern's `#extensionsMenu` container when both:
+- Extension is enabled
+- `promptGenerationMode` is `independent-api`
 
-**MANUAL-002**: Disable generation button if the message is currently streaming
+**MANUAL-002**: Remove the icon from the DOM (not just hide) when either condition above becomes false. Re-add when both become true again.
 
-**MANUAL-003**: Support two generation modes:
-- **Replace**: Delete all existing images and regenerate
-- **Append**: Keep existing images and add new ones
+**MANUAL-003**: On icon click, resolve the last assistant message by scanning `context.chat` backwards, skipping user and system messages.
 
-**MANUAL-004**: Show a dialog before generation with:
-- Number of prompts detected
-- Selected generation mode (Replace/Append)
-- Confirm/Cancel buttons
+**MANUAL-004**: Before invoking the pipeline, validate three preconditions. Surface each failure as a user-visible toast; never silently no-op:
+- No streaming session is active for any message
+- At least one assistant message exists
+- The last assistant message text is non-empty (whitespace-only counts as empty)
 
-**MANUAL-005**: Generate and insert images progressively (one at a time), not all at once
+**MANUAL-005**: Run `runIndependentPipelineForMessage` — the same function the automatic path uses. Show start / success / failure toasts.
 
-**MANUAL-006**: If generation fails for a prompt, keep the prompt tag for retry
+**MANUAL-006**: Do not pre-check whether the target message already contains `<!--img-prompt="..."-->` tags or images. Re-running against a processed message re-generates without prompting.
 
 ### 4.3 Examples
 
-**Example 1: Replace Mode**
+**Example 1: Normal invocation**
 ```
-Initial State:
-  Message #42 has:
-    - Text: "A scene <img-prompt="sunset"> and <img-prompt="ocean">"
-    - 2 existing images (old)
+Setup:
+  - Independent-API mode active
+  - Last assistant message: "She entered the garden..."
+  - No streaming in flight
 
 User Action:
-  1. Clicks manual generation button
-  2. Selects "Replace" mode
-  3. Confirms
+  1. Opens wand menu (magic-wand icon in send bar)
+  2. Clicks "Auto Illustrator: Generate for last message"
 
 Result:
-  - Old images deleted
-  - New image #1 generates and inserts after first prompt
-  - New image #2 generates and inserts after second prompt
-  - Message now has 2 new images (total: 2)
+  - Info toast: "Generating image prompts for last message..."
+  - Same pipeline as MESSAGE_RECEIVED runs
+  - Success toast: "Image prompts generated"
+  - Images appear inline in message
 ```
 
-**Example 2: Append Mode**
+**Example 2: Streaming guard**
 ```
-Initial State:
-  Message #42 has:
-    - Text: "A scene <img-prompt="sunset"> and <img-prompt="ocean">"
-    - 2 existing images (old)
+Setup:
+  - Independent-API mode active
+  - Streaming session in progress for message #42
 
 User Action:
-  1. Clicks manual generation button
-  2. Selects "Append" mode
-  3. Confirms
+  - Clicks wand icon
 
 Result:
-  - Old images remain
-  - New image #1 generates and inserts after first prompt
-  - New image #2 generates and inserts after second prompt
-  - Message now has 4 images (2 old + 2 new)
+  - Warning toast: "Cannot trigger manual generation while streaming"
+  - Pipeline not invoked
 ```
 
-**Example 3: Progressive Insertion**
+**Example 3: Mode toggle removes icon**
 ```
-Scenario: Batch generating 5 images (each takes 3 seconds)
-
-T+0s:   Dialog shows "Generate 5 images?" → User confirms
-T+0s:   Progress: "0 ok, 0 failed, 5 pending"
-T+3s:   Image #1 completes and inserts → Progress: "1 ok, 0 failed, 4 pending"
-T+6s:   Image #2 completes and inserts → Progress: "2 ok, 0 failed, 3 pending"
-T+9s:   Image #3 completes and inserts → Progress: "3 ok, 0 failed, 2 pending"
-T+12s:  Image #4 completes and inserts → Progress: "4 ok, 0 failed, 1 pending"
-T+15s:  Image #5 completes and inserts → Progress: "5 ok, 0 failed, 0 pending"
-T+15s:  Progress indicator disappears
-
-Result: User sees images appearing one by one (feels responsive)
-```
-
-**Example 4: Partial Failure**
-```
-Scenario: Batch generating 3 images, image #2 fails
-
-T+0s:   Start generation (3 prompts)
-T+3s:   Image #1 succeeds → inserts after prompt #1
-T+6s:   Image #2 fails (API error) → prompt #2 remains, no image
-T+9s:   Image #3 succeeds → inserts after prompt #3
-T+9s:   Progress: "2 ok, 1 failed, 0 pending"
-T+9s:   Toast notification: "Generated 2 out of 3 images"
+Setup:
+  - Extension enabled, mode = independent-api → icon present
+  - User switches mode to shared-api and saves
 
 Result:
-  - Message has images for prompts #1 and #3
-  - Prompt #2 tag remains (user can retry manually)
-  - User is informed of partial success
+  - Icon removed from #extensionsMenu at settings-save time
+  - No reload required
+```
+
+**Example 4: Re-run against already-processed message**
+```
+Setup:
+  - Last assistant message already contains img-prompt tags and images
+
+User Action:
+  - Clicks wand icon
+
+Result:
+  - Pipeline runs anew
+  - New prompt tags inserted (may coexist with old); new images generated
+  - No confirmation dialog
 ```
 
 ### 4.4 Anti-Patterns
 
-❌ **DO NOT** show button on messages without prompts
-❌ **DO NOT** remove prompt tags when generation fails (preserve for retry)
-❌ **DO NOT** wait until all images generate to insert (insert progressively)
-❌ **DO NOT** allow generation while streaming is active
+❌ **DO NOT** show the icon in shared-API mode (the pipeline has no work to do there)
+❌ **DO NOT** hide the icon via CSS while leaving it in the DOM — actually remove it
+❌ **DO NOT** silently no-op on invalid preconditions — always surface a toast
+❌ **DO NOT** duplicate the empty-message check as a runtime "fallback"; the service layer is the single source of truth (this UX check exists only to give a specific toast)
 
 ---
 
@@ -895,6 +883,19 @@ Result:
 - Validates insertion points are adjacent (prevents inserting in wrong location)
 - Detailed logging for debugging insertion failures
 
+**Empty-message short-circuit:**
+- If the target assistant message text is empty (or whitespace-only), the second-API call is skipped entirely.
+- Applies to both the automatic MESSAGE_RECEIVED path and the wand-menu manual trigger — the check lives in `generatePromptsForMessage`, the single choke point both paths share.
+- No prompts generated, no chat save, no image-generation session started. Logged at `info` level: `Skipping prompt generation: message text is empty`.
+
+**Memory-graph recall integration (Luker only):**
+- When running against Luker with the `memory-graph` extension loaded and a recall pass has completed for the current chat, the system prompt includes a "Memory Recall Context" section.
+- The section is inserted before `## Instructions` in the template (via the `{{MEMORY_RECALL}}` placeholder in `src/presets/prompt_generation.md`).
+- Content is the exact `corePacket` + `focusPacket` text that memory-graph handed to the main LLM during the previous recall pass, retrieved via `memory-graph.getLastRecallProjection(context)`.
+- Rendered as two H3 sub-blocks: `### Always-Injected` (from `corePacket`) and `### Recall-Selected` (from `focusPacket`). Empty packets collapse their sub-block; both empty collapses the whole section.
+- No settings toggle — auto-enabled on Luker.
+- On standard SillyTavern (no `context.getExtensionApi`), or when memory-graph is not installed, or when no recall has run yet, the `{{MEMORY_RECALL}}` placeholder collapses to empty. No dangling section header, no error to the user.
+
 ### 9.5 Examples
 
 **Example 1: Shared API Call (Default)**
@@ -976,6 +977,8 @@ Result: Extension doesn't interfere with custom API calls
 ❌ **DO NOT** forget to prune chat history in Independent API mode (causes prompt tags in future responses)
 ❌ **DO NOT** use byte offsets for insertion (context snippets are more reliable)
 ❌ **DO NOT** hide API cost warning for Independent API mode (users must understand implications)
+❌ **DO NOT** call the second-API LLM against an empty message — the empty-message short-circuit exists precisely to prevent wasted API cost on garbage input
+❌ **DO NOT** fall back to internal `memory_graph__meta` chat-state or synthesise fake recall data when `getLastRecallProjection` returns null — the empty result IS the answer, not a signal to guess
 
 ---
 
