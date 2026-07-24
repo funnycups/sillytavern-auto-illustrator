@@ -77,8 +77,9 @@ describe('prompt_generation_service', () => {
       // inspect what the {{MEMORY_RECALL}} placeholder collapsed to.
       function lastSystemPrompt(): string {
         const call = vi.mocked(mockContext.generateTask!).mock.calls[0];
-        const taskMessages = (call?.[0] as {taskMessages: Array<{role: string; content: string}>})
-          .taskMessages;
+        const taskMessages = (
+          call?.[0] as {taskMessages: Array<{role: string; content: string}>}
+        ).taskMessages;
         const system = taskMessages.find(m => m.role === 'system');
         return system?.content ?? '';
       }
@@ -105,8 +106,9 @@ describe('prompt_generation_service', () => {
       });
 
       it('collapses {{MEMORY_RECALL}} to empty when memory-graph extension is not registered', async () => {
-        (mockContext as unknown as {getExtensionApi: (n: string) => unknown}).getExtensionApi =
-          vi.fn().mockReturnValue(undefined);
+        (
+          mockContext as unknown as {getExtensionApi: (n: string) => unknown}
+        ).getExtensionApi = vi.fn().mockReturnValue(undefined);
 
         await generatePromptsForMessage(
           'some story text',
@@ -119,8 +121,11 @@ describe('prompt_generation_service', () => {
       });
 
       it('collapses {{MEMORY_RECALL}} to empty when getLastRecallProjection is absent on the api', async () => {
-        (mockContext as unknown as {getExtensionApi: (n: string) => unknown}).getExtensionApi =
-          vi.fn().mockReturnValue({/* no methods */});
+        (
+          mockContext as unknown as {getExtensionApi: (n: string) => unknown}
+        ).getExtensionApi = vi.fn().mockReturnValue({
+          /* no methods */
+        });
 
         await generatePromptsForMessage(
           'some story text',
@@ -132,10 +137,11 @@ describe('prompt_generation_service', () => {
       });
 
       it('collapses {{MEMORY_RECALL}} to empty when getLastRecallProjection returns null', async () => {
-        (mockContext as unknown as {getExtensionApi: (n: string) => unknown}).getExtensionApi =
-          vi.fn().mockReturnValue({
-            getLastRecallProjection: vi.fn().mockResolvedValue(null),
-          });
+        (
+          mockContext as unknown as {getExtensionApi: (n: string) => unknown}
+        ).getExtensionApi = vi.fn().mockReturnValue({
+          getLastRecallProjection: vi.fn().mockResolvedValue(null),
+        });
 
         await generatePromptsForMessage(
           'some story text',
@@ -147,29 +153,35 @@ describe('prompt_generation_service', () => {
       });
 
       it('collapses {{MEMORY_RECALL}} to empty and warns when getLastRecallProjection throws', async () => {
-        (mockContext as unknown as {getExtensionApi: (n: string) => unknown}).getExtensionApi =
-          vi.fn().mockReturnValue({
-            getLastRecallProjection: vi
-              .fn()
-              .mockRejectedValue(new Error('luker api broke')),
-          });
+        (
+          mockContext as unknown as {getExtensionApi: (n: string) => unknown}
+        ).getExtensionApi = vi.fn().mockReturnValue({
+          getLastRecallProjection: vi
+            .fn()
+            .mockRejectedValue(new Error('luker api broke')),
+        });
 
         // Should not throw — the exception is caught and treated as "no data"
         await expect(
-          generatePromptsForMessage('some story text', mockContext, mockSettings)
+          generatePromptsForMessage(
+            'some story text',
+            mockContext,
+            mockSettings
+          )
         ).resolves.toBeDefined();
 
         expect(lastSystemPrompt()).not.toContain('## Memory Recall Context');
       });
 
       it('collapses {{MEMORY_RECALL}} to empty when both packets are empty strings', async () => {
-        (mockContext as unknown as {getExtensionApi: (n: string) => unknown}).getExtensionApi =
-          vi.fn().mockReturnValue({
-            getLastRecallProjection: vi.fn().mockResolvedValue({
-              at: 1_700_000_000_000,
-              blocks: {corePacket: '   ', focusPacket: ''},
-            }),
-          });
+        (
+          mockContext as unknown as {getExtensionApi: (n: string) => unknown}
+        ).getExtensionApi = vi.fn().mockReturnValue({
+          getLastRecallProjection: vi.fn().mockResolvedValue({
+            at: 1_700_000_000_000,
+            blocks: {corePacket: '   ', focusPacket: ''},
+          }),
+        });
 
         await generatePromptsForMessage(
           'some story text',
@@ -181,16 +193,17 @@ describe('prompt_generation_service', () => {
       });
 
       it('renders only the Always-Injected sub-block when only corePacket is present', async () => {
-        (mockContext as unknown as {getExtensionApi: (n: string) => unknown}).getExtensionApi =
-          vi.fn().mockReturnValue({
-            getLastRecallProjection: vi.fn().mockResolvedValue({
-              at: 1_700_000_000_000,
-              blocks: {
-                corePacket: '| name | value |\n|---|---|\n| A | 1 |',
-                focusPacket: '',
-              },
-            }),
-          });
+        (
+          mockContext as unknown as {getExtensionApi: (n: string) => unknown}
+        ).getExtensionApi = vi.fn().mockReturnValue({
+          getLastRecallProjection: vi.fn().mockResolvedValue({
+            at: 1_700_000_000_000,
+            blocks: {
+              corePacket: '| name | value |\n|---|---|\n| A | 1 |',
+              focusPacket: '',
+            },
+          }),
+        });
 
         await generatePromptsForMessage(
           'some story text',
@@ -206,16 +219,18 @@ describe('prompt_generation_service', () => {
       });
 
       it('renders only the Recall-Selected sub-block when only focusPacket is present', async () => {
-        (mockContext as unknown as {getExtensionApi: (n: string) => unknown}).getExtensionApi =
-          vi.fn().mockReturnValue({
-            getLastRecallProjection: vi.fn().mockResolvedValue({
-              at: 1_700_000_000_000,
-              blocks: {
-                corePacket: '',
-                focusPacket: '### Recall Table\n| id | note |\n|---|---|\n| n1 | hi |',
-              },
-            }),
-          });
+        (
+          mockContext as unknown as {getExtensionApi: (n: string) => unknown}
+        ).getExtensionApi = vi.fn().mockReturnValue({
+          getLastRecallProjection: vi.fn().mockResolvedValue({
+            at: 1_700_000_000_000,
+            blocks: {
+              corePacket: '',
+              focusPacket:
+                '### Recall Table\n| id | note |\n|---|---|\n| n1 | hi |',
+            },
+          }),
+        });
 
         await generatePromptsForMessage(
           'some story text',
@@ -231,16 +246,17 @@ describe('prompt_generation_service', () => {
       });
 
       it('renders both sub-blocks in order when both packets are present', async () => {
-        (mockContext as unknown as {getExtensionApi: (n: string) => unknown}).getExtensionApi =
-          vi.fn().mockReturnValue({
-            getLastRecallProjection: vi.fn().mockResolvedValue({
-              at: 1_700_000_000_000,
-              blocks: {
-                corePacket: 'CORE_CONTENT_MARKER',
-                focusPacket: 'FOCUS_CONTENT_MARKER',
-              },
-            }),
-          });
+        (
+          mockContext as unknown as {getExtensionApi: (n: string) => unknown}
+        ).getExtensionApi = vi.fn().mockReturnValue({
+          getLastRecallProjection: vi.fn().mockResolvedValue({
+            at: 1_700_000_000_000,
+            blocks: {
+              corePacket: 'CORE_CONTENT_MARKER',
+              focusPacket: 'FOCUS_CONTENT_MARKER',
+            },
+          }),
+        });
 
         await generatePromptsForMessage(
           'some story text',
@@ -258,13 +274,14 @@ describe('prompt_generation_service', () => {
       });
 
       it('places the Memory Recall Context block before the ## Instructions section', async () => {
-        (mockContext as unknown as {getExtensionApi: (n: string) => unknown}).getExtensionApi =
-          vi.fn().mockReturnValue({
-            getLastRecallProjection: vi.fn().mockResolvedValue({
-              at: 1_700_000_000_000,
-              blocks: {corePacket: 'CORE', focusPacket: 'FOCUS'},
-            }),
-          });
+        (
+          mockContext as unknown as {getExtensionApi: (n: string) => unknown}
+        ).getExtensionApi = vi.fn().mockReturnValue({
+          getLastRecallProjection: vi.fn().mockResolvedValue({
+            at: 1_700_000_000_000,
+            blocks: {corePacket: 'CORE', focusPacket: 'FOCUS'},
+          }),
+        });
 
         await generatePromptsForMessage(
           'some story text',
@@ -282,8 +299,9 @@ describe('prompt_generation_service', () => {
 
       it('passes the SillyTavern context through to getLastRecallProjection', async () => {
         const getLastRecallProjection = vi.fn().mockResolvedValue(null);
-        (mockContext as unknown as {getExtensionApi: (n: string) => unknown}).getExtensionApi =
-          vi.fn().mockReturnValue({getLastRecallProjection});
+        (
+          mockContext as unknown as {getExtensionApi: (n: string) => unknown}
+        ).getExtensionApi = vi.fn().mockReturnValue({getLastRecallProjection});
 
         await generatePromptsForMessage(
           'some story text',
