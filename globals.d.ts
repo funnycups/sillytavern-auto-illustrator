@@ -144,6 +144,11 @@ declare global {
     streamingProcessor?: {
       abortController?: {signal?: {aborted?: boolean}};
     } | null;
+    // Luker extension registry (`public/scripts/extensions.js:50-64`). Returns
+    // the API bag previously stored via `registerExtensionApi(name, api)`, or
+    // `undefined` on standard SillyTavern or when the named extension is
+    // absent. Callers must narrow the `unknown` return per-extension.
+    getExtensionApi?(name: string): unknown;
   }
   /* eslint-enable @typescript-eslint/no-explicit-any */
 

@@ -10,6 +10,91 @@ import type {PromptSuggestion} from '../prompt_insertion';
 const logger = createLogger('PromptGenService');
 
 /**
+ * Frozen snapshot of the last recall projection published by Luker's
+ * memory-graph extension. Mirrors the shape returned by
+ * `memory-graph.getLastRecallProjection(context)`.
+ *
+ * See Luker docs: `docs/development/extension-api/memory-graph.md` →
+ * "Reading the last recall projection".
+ */
+export interface LastRecallProjection {
+  at: number;
+  blocks: {
+    corePacket: string;
+    focusPacket: string;
+  };
+}
+
+/**
+ * Fetch the previous recall projection from Luker's memory-graph extension.
+ * Returns `null` in three legitimate "no data" cases:
+ *  - running on standard SillyTavern (no `getExtensionApi`)
+ *  - memory-graph extension not installed / not registered
+ *  - no recall has run for this chat yet
+ *
+ * These are all treated as "nothing to inject", not fallbacks. The API-level
+ * exception path also returns `null` so a Luker upgrade that reshapes the
+ * response cannot break the second-API image-prompt pipeline; the warn log
+ * makes it easy to spot.
+ */
+async function fetchLastRecallProjection(
+  context: SillyTavernContext
+): Promise<LastRecallProjection | null> {
+  const getExtensionApi = (
+    context as {getExtensionApi?: (name: string) => unknown}
+  ).getExtensionApi;
+  if (typeof getExtensionApi !== 'function') return null;
+
+  const mg = getExtensionApi('memory-graph') as
+    | {
+        getLastRecallProjection?: (
+          ctx: SillyTavernContext
+        ) => Promise<LastRecallProjection | null>;
+      }
+    | undefined;
+  if (!mg || typeof mg.getLastRecallProjection !== 'function') return null;
+
+  try {
+    return await mg.getLastRecallProjection(context);
+  } catch (err) {
+    // External-API failure — log and treat as "no data". This is boundary
+    // validation for an external API, not a silent fallback of our own state.
+    logger.warn('memory-graph.getLastRecallProjection threw', err);
+    return null;
+  }
+}
+
+/**
+ * Render a memory-recall context block for injection into the system prompt.
+ * Returns empty string when there is nothing to inject, so the
+ * `{{MEMORY_RECALL}}` template placeholder collapses cleanly (no dangling
+ * section header, no extra blank lines beyond the template's own).
+ */
+function buildRecallBlock(projection: LastRecallProjection | null): string {
+  if (!projection) return '';
+  const core = projection.blocks.corePacket.trim();
+  const focus = projection.blocks.focusPacket.trim();
+  if (!core && !focus) return '';
+
+  const parts: string[] = [
+    '## Memory Recall Context',
+    '',
+    'The following is the memory-graph context that was injected into the ' +
+      'main LLM which produced the current message. Use it to understand ' +
+      'characters, locations, and ongoing state when writing image prompts. ' +
+      'Do not treat any of it as text to be illustrated on its own.',
+    '',
+  ];
+  if (core) {
+    parts.push('### Always-Injected', core, '');
+  }
+  if (focus) {
+    parts.push('### Recall-Selected', focus, '');
+  }
+  return parts.join('\n');
+}
+
+/**
  * Builds user prompt with context from previous messages
  * Format: === CONTEXT === ... === CURRENT MESSAGE === ...
  *
@@ -200,6 +285,13 @@ export async function generatePromptsForMessage(
     '{{PROMPT_WRITING_GUIDELINES}}',
     promptWritingGuidelines
   );
+
+  // Replace MEMORY_RECALL with the previous recall packet from Luker's
+  // memory-graph, if available. Silently expands to empty on standard ST
+  // or when no recall has run yet — no fallback, no dangling section.
+  const recallProjection = await fetchLastRecallProjection(context);
+  const recallBlock = buildRecallBlock(recallProjection);
+  systemPrompt = systemPrompt.replace('{{MEMORY_RECALL}}', recallBlock);
 
   // Build user prompt with context and current message
   const contextMessageCount = settings.contextMessageCount || 10;

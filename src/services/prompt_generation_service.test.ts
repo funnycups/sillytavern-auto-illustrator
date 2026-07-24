@@ -72,6 +72,229 @@ describe('prompt_generation_service', () => {
       });
     });
 
+    describe('memory-graph recall injection', () => {
+      // Helper: capture the system prompt sent to generateTask so we can
+      // inspect what the {{MEMORY_RECALL}} placeholder collapsed to.
+      function lastSystemPrompt(): string {
+        const call = vi.mocked(mockContext.generateTask!).mock.calls[0];
+        const taskMessages = (call?.[0] as {taskMessages: Array<{role: string; content: string}>})
+          .taskMessages;
+        const system = taskMessages.find(m => m.role === 'system');
+        return system?.content ?? '';
+      }
+
+      const emptyLlmResponse = '---END---';
+
+      beforeEach(() => {
+        vi.mocked(mockContext.generateTask!).mockResolvedValue({
+          assistantText: emptyLlmResponse,
+        });
+      });
+
+      it('collapses {{MEMORY_RECALL}} to empty when getExtensionApi is missing (standard SillyTavern)', async () => {
+        // Bare context: no getExtensionApi field at all
+        await generatePromptsForMessage(
+          'some story text',
+          mockContext,
+          mockSettings
+        );
+
+        const sys = lastSystemPrompt();
+        expect(sys).not.toContain('{{MEMORY_RECALL}}');
+        expect(sys).not.toContain('## Memory Recall Context');
+      });
+
+      it('collapses {{MEMORY_RECALL}} to empty when memory-graph extension is not registered', async () => {
+        (mockContext as unknown as {getExtensionApi: (n: string) => unknown}).getExtensionApi =
+          vi.fn().mockReturnValue(undefined);
+
+        await generatePromptsForMessage(
+          'some story text',
+          mockContext,
+          mockSettings
+        );
+
+        const sys = lastSystemPrompt();
+        expect(sys).not.toContain('## Memory Recall Context');
+      });
+
+      it('collapses {{MEMORY_RECALL}} to empty when getLastRecallProjection is absent on the api', async () => {
+        (mockContext as unknown as {getExtensionApi: (n: string) => unknown}).getExtensionApi =
+          vi.fn().mockReturnValue({/* no methods */});
+
+        await generatePromptsForMessage(
+          'some story text',
+          mockContext,
+          mockSettings
+        );
+
+        expect(lastSystemPrompt()).not.toContain('## Memory Recall Context');
+      });
+
+      it('collapses {{MEMORY_RECALL}} to empty when getLastRecallProjection returns null', async () => {
+        (mockContext as unknown as {getExtensionApi: (n: string) => unknown}).getExtensionApi =
+          vi.fn().mockReturnValue({
+            getLastRecallProjection: vi.fn().mockResolvedValue(null),
+          });
+
+        await generatePromptsForMessage(
+          'some story text',
+          mockContext,
+          mockSettings
+        );
+
+        expect(lastSystemPrompt()).not.toContain('## Memory Recall Context');
+      });
+
+      it('collapses {{MEMORY_RECALL}} to empty and warns when getLastRecallProjection throws', async () => {
+        (mockContext as unknown as {getExtensionApi: (n: string) => unknown}).getExtensionApi =
+          vi.fn().mockReturnValue({
+            getLastRecallProjection: vi
+              .fn()
+              .mockRejectedValue(new Error('luker api broke')),
+          });
+
+        // Should not throw — the exception is caught and treated as "no data"
+        await expect(
+          generatePromptsForMessage('some story text', mockContext, mockSettings)
+        ).resolves.toBeDefined();
+
+        expect(lastSystemPrompt()).not.toContain('## Memory Recall Context');
+      });
+
+      it('collapses {{MEMORY_RECALL}} to empty when both packets are empty strings', async () => {
+        (mockContext as unknown as {getExtensionApi: (n: string) => unknown}).getExtensionApi =
+          vi.fn().mockReturnValue({
+            getLastRecallProjection: vi.fn().mockResolvedValue({
+              at: 1_700_000_000_000,
+              blocks: {corePacket: '   ', focusPacket: ''},
+            }),
+          });
+
+        await generatePromptsForMessage(
+          'some story text',
+          mockContext,
+          mockSettings
+        );
+
+        expect(lastSystemPrompt()).not.toContain('## Memory Recall Context');
+      });
+
+      it('renders only the Always-Injected sub-block when only corePacket is present', async () => {
+        (mockContext as unknown as {getExtensionApi: (n: string) => unknown}).getExtensionApi =
+          vi.fn().mockReturnValue({
+            getLastRecallProjection: vi.fn().mockResolvedValue({
+              at: 1_700_000_000_000,
+              blocks: {
+                corePacket: '| name | value |\n|---|---|\n| A | 1 |',
+                focusPacket: '',
+              },
+            }),
+          });
+
+        await generatePromptsForMessage(
+          'some story text',
+          mockContext,
+          mockSettings
+        );
+
+        const sys = lastSystemPrompt();
+        expect(sys).toContain('## Memory Recall Context');
+        expect(sys).toContain('### Always-Injected');
+        expect(sys).toContain('| A | 1 |');
+        expect(sys).not.toContain('### Recall-Selected');
+      });
+
+      it('renders only the Recall-Selected sub-block when only focusPacket is present', async () => {
+        (mockContext as unknown as {getExtensionApi: (n: string) => unknown}).getExtensionApi =
+          vi.fn().mockReturnValue({
+            getLastRecallProjection: vi.fn().mockResolvedValue({
+              at: 1_700_000_000_000,
+              blocks: {
+                corePacket: '',
+                focusPacket: '### Recall Table\n| id | note |\n|---|---|\n| n1 | hi |',
+              },
+            }),
+          });
+
+        await generatePromptsForMessage(
+          'some story text',
+          mockContext,
+          mockSettings
+        );
+
+        const sys = lastSystemPrompt();
+        expect(sys).toContain('## Memory Recall Context');
+        expect(sys).toContain('### Recall-Selected');
+        expect(sys).toContain('| n1 | hi |');
+        expect(sys).not.toContain('### Always-Injected');
+      });
+
+      it('renders both sub-blocks in order when both packets are present', async () => {
+        (mockContext as unknown as {getExtensionApi: (n: string) => unknown}).getExtensionApi =
+          vi.fn().mockReturnValue({
+            getLastRecallProjection: vi.fn().mockResolvedValue({
+              at: 1_700_000_000_000,
+              blocks: {
+                corePacket: 'CORE_CONTENT_MARKER',
+                focusPacket: 'FOCUS_CONTENT_MARKER',
+              },
+            }),
+          });
+
+        await generatePromptsForMessage(
+          'some story text',
+          mockContext,
+          mockSettings
+        );
+
+        const sys = lastSystemPrompt();
+        const coreIdx = sys.indexOf('### Always-Injected');
+        const focusIdx = sys.indexOf('### Recall-Selected');
+        expect(coreIdx).toBeGreaterThan(-1);
+        expect(focusIdx).toBeGreaterThan(coreIdx);
+        expect(sys).toContain('CORE_CONTENT_MARKER');
+        expect(sys).toContain('FOCUS_CONTENT_MARKER');
+      });
+
+      it('places the Memory Recall Context block before the ## Instructions section', async () => {
+        (mockContext as unknown as {getExtensionApi: (n: string) => unknown}).getExtensionApi =
+          vi.fn().mockReturnValue({
+            getLastRecallProjection: vi.fn().mockResolvedValue({
+              at: 1_700_000_000_000,
+              blocks: {corePacket: 'CORE', focusPacket: 'FOCUS'},
+            }),
+          });
+
+        await generatePromptsForMessage(
+          'some story text',
+          mockContext,
+          mockSettings
+        );
+
+        const sys = lastSystemPrompt();
+        const recallIdx = sys.indexOf('## Memory Recall Context');
+        const instructionsIdx = sys.indexOf('## Instructions');
+        expect(recallIdx).toBeGreaterThan(-1);
+        expect(instructionsIdx).toBeGreaterThan(-1);
+        expect(recallIdx).toBeLessThan(instructionsIdx);
+      });
+
+      it('passes the SillyTavern context through to getLastRecallProjection', async () => {
+        const getLastRecallProjection = vi.fn().mockResolvedValue(null);
+        (mockContext as unknown as {getExtensionApi: (n: string) => unknown}).getExtensionApi =
+          vi.fn().mockReturnValue({getLastRecallProjection});
+
+        await generatePromptsForMessage(
+          'some story text',
+          mockContext,
+          mockSettings
+        );
+
+        expect(getLastRecallProjection).toHaveBeenCalledWith(mockContext);
+      });
+    });
+
     it('should parse valid plain text response with single prompt', async () => {
       const messageText = 'She walked through the forest under the moonlight.';
       const llmResponse = `---PROMPT---
