@@ -58,6 +58,7 @@ import {initializeGalleryWidget, getGalleryWidget} from './gallery_widget';
 import {StreamingPreviewWidget} from './streaming_preview_widget';
 import {isIndependentApiMode} from './mode_utils';
 import {initializeChatChangedHandler} from './chat_changed_handler';
+import {syncWandMenuVisibility} from './wand_menu';
 import {initializeChatChangeOperations} from './chat_change_operations';
 
 const logger = createLogger('Main');
@@ -850,6 +851,10 @@ function handleSettingsChange(): void {
 
   // Update validation status after settings change
   updateValidationStatus();
+
+  // Sync the wand-menu icon visibility (runtime toggle when
+  // promptGenerationMode changes without a full reload).
+  syncWandMenuVisibility(settings);
 
   // Notify user if enable state or widget visibility changed
   if (
@@ -1838,6 +1843,10 @@ function initialize(): void {
 
   // Add click handlers to existing images
   addImageClickHandlers(settings);
+
+  // Register the wand-menu icon for manual triggering (only when
+  // extension is enabled AND independent-API mode is active).
+  syncWandMenuVisibility(settings);
 }
 
 // Initialize when extension loads
