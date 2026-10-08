@@ -134,6 +134,21 @@ ${currentMessageText}`;
 }
 
 /**
+ * Strips all ` thinking...` blocks from an LLM response.
+ *
+ * Reasoning models often wrap their chain-of-thought in ` thinking` tags
+ * before emitting the actual answer. Those blocks are not part of our
+ * output schema and can contain text that confuses the delimiter parser,
+ * so they are removed before parsing.
+ *
+ * @param text - Raw LLM response text
+ * @returns Response text with every ` thinking...` block removed
+ */
+export function stripThinkTags(text: string): string {
+  return text.replace(/<think[\s\S]*?<\/think>/g, '');
+}
+
+/**
  * Parses LLM response and extracts prompt suggestions
  * Expects plain text delimiter format:
  * ---PROMPT---
@@ -339,6 +354,10 @@ export async function generatePromptsForMessage(
 
     logger.debug('LLM response received');
     logger.trace('Raw LLM response:', llmResponse);
+
+    // Reasoning models may emit  thinking... blocks before the answer; they
+    // are not part of our schema and would corrupt the delimiter parse.
+    llmResponse = stripThinkTags(llmResponse);
   } catch (error) {
     logger.error('LLM generation failed:', error);
     return []; // Return empty array instead of throwing

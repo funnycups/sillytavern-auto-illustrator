@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Strip ` thinking` blocks from Independent API responses** - Reasoning models that emit chain-of-thought in ` thinking...` blocks before the answer no longer corrupt prompt parsing; `generatePromptsForMessage` removes every think block before `parsePromptSuggestions`
 - **Remove REASONING from Independent API output schema** - The prompt-generation template no longer forces the model to emit a `REASONING:` line per prompt block
   - Rationale: Coercing chain-of-thought into an output field tends to make the model treat it as boilerplate and cut corners on the actual work. If a user wants the model to think first, that's a user-prompt concern (e.g. instructing the model to write out its thinking at the start of the response), not something this extension's output schema should mandate
   - Solution: `parsePromptSuggestions` drops the REASONING regex; `PromptSuggestion.reasoning` is removed from the type; `prompt_generation.md` template no longer lists REASONING in the output format, rules, or example

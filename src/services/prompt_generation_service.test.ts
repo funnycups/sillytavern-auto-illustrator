@@ -3,7 +3,10 @@
  */
 
 import {describe, it, expect, vi, beforeEach} from 'vitest';
-import {generatePromptsForMessage} from './prompt_generation_service';
+import {
+  generatePromptsForMessage,
+  stripThinkTags,
+} from './prompt_generation_service';
 
 describe('prompt_generation_service', () => {
   let mockContext: SillyTavernContext;
@@ -69,6 +72,61 @@ describe('prompt_generation_service', () => {
         );
 
         expect(result).toEqual([]);
+      });
+    });
+
+    describe('think-tag stripping', () => {
+      const OPEN = '<think>';
+      const CLOSE = '</think>';
+
+      it('parses prompts correctly when the response is wrapped in a think block', async () => {
+        const messageText = 'She walked through the forest.';
+        const llmResponse =
+          OPEN +
+          '\nLet me reason. This decoy must be ignored:\n' +
+          '---PROMPT---\nTEXT: decoy\nINSERT_AFTER: x\nINSERT_BEFORE: y\n---END---\n' +
+          'More reasoning here.\n' +
+          CLOSE +
+          '\nThe real answer follows.\n' +
+          '---PROMPT---\nTEXT: 1girl, forest\nINSERT_AFTER: through the forest\nINSERT_BEFORE: under the moonlight\n---END---';
+
+        vi.mocked(mockContext.generateTask!).mockResolvedValue({
+          assistantText: llmResponse,
+        });
+
+        const result = await generatePromptsForMessage(
+          messageText,
+          mockContext,
+          mockSettings
+        );
+
+        expect(result).toHaveLength(1);
+        expect(result[0].text).toBe('1girl, forest');
+      });
+
+      it('strips multiple think blocks before parsing', async () => {
+        const messageText = 'Test message.';
+        const llmResponse =
+          OPEN +
+          'first thought block with a decoy\n---PROMPT---\nTEXT: decoy\nINSERT_AFTER: a\nINSERT_BEFORE: b\n---END---\n' +
+          CLOSE +
+          '\n\n---PROMPT---\nTEXT: real prompt\nINSERT_AFTER: test\nINSERT_BEFORE: message\n---END---' +
+          '\n\n' +
+          OPEN +
+          'second thought block output';
+
+        vi.mocked(mockContext.generateTask!).mockResolvedValue({
+          assistantText: llmResponse,
+        });
+
+        const result = await generatePromptsForMessage(
+          messageText,
+          mockContext,
+          mockSettings
+        );
+
+        expect(result).toHaveLength(1);
+        expect(result[0].text).toBe('real prompt');
       });
     });
 
@@ -778,6 +836,36 @@ REASONING: Handles newlines naturally
       // The regex captures only the first line for INSERT_AFTER/INSERT_BEFORE
       expect(result[0].insertAfter).toBe('Test');
       expect(result[0].insertBefore).toBe('message with newlines');
+    });
+  });
+
+  describe('stripThinkTags', () => {
+    it('removes a single think block', () => {
+      expect(stripThinkTags('a<think>hidden reasoning</think>b')).toBe('ab');
+    });
+
+    it('removes multiple think blocks', () => {
+      expect(stripThinkTags('x<think>one</think>y<think>two</think>z')).toBe(
+        'xyz'
+      );
+    });
+
+    it('removes multiline think blocks', () => {
+      expect(stripThinkTags('<think>\nline1\nline2\n</think>answer')).toBe(
+        'answer'
+      );
+    });
+
+    it('leaves text without think tags untouched', () => {
+      expect(stripThinkTags('plain response ---PROMPT---')).toBe(
+        'plain response ---PROMPT---'
+      );
+    });
+
+    it('leaves an unterminated think tag untouched', () => {
+      expect(stripThinkTags('before <think never closed')).toBe(
+        'before <think never closed'
+      );
     });
   });
 });
