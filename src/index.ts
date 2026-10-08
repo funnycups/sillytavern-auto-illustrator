@@ -58,6 +58,7 @@ import {initializeGalleryWidget, getGalleryWidget} from './gallery_widget';
 import {StreamingPreviewWidget} from './streaming_preview_widget';
 import {isIndependentApiMode} from './mode_utils';
 import {initializeChatChangedHandler} from './chat_changed_handler';
+import {registerIndependentApiPresetWatcher} from './independent_api_preset_watcher';
 import {syncWandMenuVisibility} from './wand_menu';
 import {initializeChatChangeOperations} from './chat_change_operations';
 
@@ -1517,6 +1518,10 @@ function registerEventHandlers(): void {
   });
 
   // Note: CHAT_CHANGED is now handled by chat_changed_handler module
+
+  // Keep the Independent-API connection-profile / chat-completion preset
+  // selects in sync with Luker/SillyTavern's global lists.
+  registerIndependentApiPresetWatcher(context, populateIndependentApiSelects);
 
   // Mark as registered to prevent duplicates
   eventHandlersRegistered = true;
