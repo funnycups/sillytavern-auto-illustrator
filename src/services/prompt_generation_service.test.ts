@@ -130,6 +130,110 @@ describe('prompt_generation_service', () => {
       });
     });
 
+    describe('placeholder example blocks', () => {
+      const O = String.fromCharCode(60) + 'think' + String.fromCharCode(62);
+      const C = String.fromCharCode(60) + '/think' + String.fromCharCode(62);
+
+      it('ignores a leaked example block whose fields are placeholder ellipses', async () => {
+        const messageText = 'She walked through the forest.';
+        // Mimics a reasoning model that dumps its chain-of-thought, which
+        // contains an illustrative output example with its own nested
+        // think pair. The nested close terminates the strip early, so the
+        // example block survives into the parser.
+        const llmResponse =
+          ' ' +
+          O +
+          '\n' +
+          'Let me figure out the output structure.\n' +
+          ' ' +
+          O +
+          '...' +
+          C +
+          '\n' +
+          '---PROMPT---\n' +
+          'TEXT: ...\n' +
+          'INSERT_AFTER: ...\n' +
+          'INSERT_BEFORE: ...\n' +
+          '---PROMPT---\n' +
+          'More reasoning here.\n' +
+          ' ' +
+          C +
+          '\n' +
+          '---PROMPT---\n' +
+          'TEXT: 1girl, forest\n' +
+          'INSERT_AFTER: through the forest\n' +
+          'INSERT_BEFORE: under the moonlight\n' +
+          '---END---';
+
+        vi.mocked(mockContext.generateTask!).mockResolvedValue({
+          assistantText: llmResponse,
+        });
+
+        const result = await generatePromptsForMessage(
+          messageText,
+          mockContext,
+          mockSettings
+        );
+
+        expect(result).toHaveLength(1);
+        expect(result[0].text).toBe('1girl, forest');
+      });
+
+      it('ignores a block whose TEXT is a unicode ellipsis placeholder', async () => {
+        const messageText = 'Test message.';
+        const llmResponse = [
+          '---PROMPT---',
+          'TEXT: \u2026',
+          'INSERT_AFTER: \u2026',
+          'INSERT_BEFORE: \u2026',
+          '---PROMPT---',
+          'TEXT: real prompt',
+          'INSERT_AFTER: test',
+          'INSERT_BEFORE: message',
+          '---END---',
+        ].join('\n');
+
+        vi.mocked(mockContext.generateTask!).mockResolvedValue({
+          assistantText: llmResponse,
+        });
+
+        const result = await generatePromptsForMessage(
+          messageText,
+          mockContext,
+          mockSettings
+        );
+
+        expect(result).toHaveLength(1);
+        expect(result[0].text).toBe('real prompt');
+      });
+
+      it('keeps a real prompt whose TEXT contains punctuation', async () => {
+        const messageText = 'Test message.';
+        const llmResponse = [
+          '---PROMPT---',
+          'TEXT: 1girl, red dress, ... trailing dots are fine',
+          'INSERT_AFTER: test',
+          'INSERT_BEFORE: message',
+          '---END---',
+        ].join('\n');
+
+        vi.mocked(mockContext.generateTask!).mockResolvedValue({
+          assistantText: llmResponse,
+        });
+
+        const result = await generatePromptsForMessage(
+          messageText,
+          mockContext,
+          mockSettings
+        );
+
+        expect(result).toHaveLength(1);
+        expect(result[0].text).toBe(
+          '1girl, red dress, ... trailing dots are fine'
+        );
+      });
+    });
+
     describe('memory-graph recall injection', () => {
       // Helper: capture the system prompt sent to generateTask so we can
       // inspect what the {{MEMORY_RECALL}} placeholder collapsed to.

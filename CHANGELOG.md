@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Reject placeholder example blocks in Independent API output** - When a reasoning model leaks its own chain-of-thought, it may include an output-format example (`TEXT: ...` / `INSERT_AFTER: ...` / `INSERT_BEFORE: ...`). `parsePromptSuggestions` now treats fields containing only dots/ellipsis/whitespace as placeholders and skips the block, instead of emitting a bogus `...` image prompt
 - **Strip ` thinking` blocks from Independent API responses** - Reasoning models that emit chain-of-thought in ` thinking...` blocks before the answer no longer corrupt prompt parsing; `generatePromptsForMessage` removes every think block before `parsePromptSuggestions`
 - **Independent API preset selects refresh on global list changes** - The Connection Profile and Chat Completion Preset dropdowns now update immediately when Luker/SillyTavern presets are created, renamed, deleted, or when connection profiles change, instead of only refreshing when the settings panel is reopened
 - **Remove REASONING from Independent API output schema** - The prompt-generation template no longer forces the model to emit a `REASONING:` line per prompt block

@@ -149,6 +149,15 @@ export function stripThinkTags(text: string): string {
 }
 
 /**
+ * True when a field value consists only of dots / ellipsis characters /
+ * whitespace — i.e. a placeholder copied from an output-format example the
+ * model wrote inside its own reasoning, not real content.
+ */
+function isPlaceholderValue(value: string): boolean {
+  return /^[.\u2026\u22ef\s]+$/.test(value);
+}
+
+/**
  * Parses LLM response and extracts prompt suggestions
  * Expects plain text delimiter format:
  * ---PROMPT---
@@ -216,6 +225,24 @@ function parsePromptSuggestions(llmResponse: string): PromptSuggestion[] {
         if (!insertBefore) emptyFields.push('INSERT_BEFORE');
         logger.warn(
           `Skipping prompt block with empty fields: ${emptyFields.join(', ')}`
+        );
+        logger.debug('Block content preview:', blockContent.substring(0, 200));
+        continue;
+      }
+
+      // Check placeholder-only values. Reasoning models can leak an
+      // output-format example block (e.g. `TEXT: ...`) into the response;
+      // those fields are placeholders, never real prompts/anchors.
+      const placeholderFields = [];
+      if (isPlaceholderValue(text)) placeholderFields.push('TEXT');
+      if (isPlaceholderValue(insertAfter))
+        placeholderFields.push('INSERT_AFTER');
+      if (isPlaceholderValue(insertBefore)) {
+        placeholderFields.push('INSERT_BEFORE');
+      }
+      if (placeholderFields.length > 0) {
+        logger.warn(
+          `Skipping prompt block with placeholder-only fields: ${placeholderFields.join(', ')}`
         );
         logger.debug('Block content preview:', blockContent.substring(0, 200));
         continue;
